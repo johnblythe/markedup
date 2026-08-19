@@ -1,0 +1,39 @@
+{
+  "name": "markup",
+  "version": "0.1.0",
+  "description": "Point-and-click annotation layer for review artifacts. Wraps an HTML file with a localhost annotation overlay; exports markdown + PNG feedback bundle.",
+  "bin": {
+    "markup": "./bin/markup.js"
+  },
+  "main": "src/serve.js",
+  "scripts": {
+    "test": "node --test 'test/*.test.js'",
+    "install:global": "npm link"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "modern-screenshot": "^4.4.39",
+    "open": "^10.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/johnblythe/markedup.git"
+  },
+  "homepage": "https://github.com/johnblythe/markedup#readme",
+  "bugs": {
+    "url": "https://github.com/johnblythe/markedup/issues"
+  },
+  "keywords": [
+    "annotation",
+    "html",
+    "review",
+    "feedback",
+    "cli",
+    "claude-code"
+  ]
+}

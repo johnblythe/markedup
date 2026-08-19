@@ -1,0 +1,607 @@
+/* Markup overlay styles. All selectors scoped under .markup-* / #markup-*
+ * to minimize collision with the wrapped page's own styles.
+ * Use very high z-index so we win against most page chrome.
+ */
+
+:root {
+  --markup-accent: #d35400;
+  --markup-accent-light: #f39c12;
+  --markup-bg: #fff;
+  --markup-text: #222;
+  --markup-muted: #777;
+  --markup-border: #ddd;
+  --markup-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+#markup-toolbar {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: var(--markup-bg);
+  border: 1px solid var(--markup-border);
+  border-radius: 8px;
+  box-shadow: var(--markup-shadow);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--markup-text);
+  min-width: 160px;
+}
+
+#markup-toolbar .markup-toolbar-row {
+  display: flex;
+  gap: 4px;
+}
+
+#markup-toolbar .markup-toolbar-title {
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--markup-muted);
+  padding: 2px 4px 4px 4px;
+}
+
+#markup-toolbar button {
+  flex: 1;
+  cursor: pointer;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #f5f5f5;
+  color: var(--markup-text);
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+#markup-toolbar button:hover {
+  background: #eaeaea;
+}
+
+#markup-toolbar button.markup-mode-active {
+  background: var(--markup-accent);
+  color: #fff;
+  border-color: var(--markup-accent);
+}
+
+#markup-toolbar .markup-count {
+  font-size: 10px;
+  color: var(--markup-muted);
+  padding: 4px 4px 0 4px;
+  text-align: center;
+}
+
+#markup-popover {
+  position: absolute;
+  z-index: 100000;
+  display: none;
+  padding: 8px;
+  background: var(--markup-bg);
+  border: 1px solid var(--markup-border);
+  border-radius: 6px;
+  box-shadow: var(--markup-shadow);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--markup-text);
+  min-width: 240px;
+  max-width: 360px;
+}
+
+#markup-popover.markup-popover-visible {
+  display: block;
+}
+
+#markup-popover textarea {
+  width: 100%;
+  min-height: 60px;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px;
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+#markup-popover .markup-popover-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+#markup-popover button {
+  cursor: pointer;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #f5f5f5;
+  color: var(--markup-text);
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+}
+
+#markup-popover button.markup-popover-primary {
+  background: var(--markup-accent);
+  color: #fff;
+  border-color: var(--markup-accent);
+}
+
+#markup-popover button.markup-popover-danger {
+  color: #c0392b;
+}
+
+mark.markup-span {
+  background: rgba(243, 156, 18, 0.35);
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+mark.markup-span:hover {
+  background: rgba(243, 156, 18, 0.6);
+}
+
+/* Pending highlight: shown while popover is open, before save. Distinct so
+ * the user can tell finalized from in-progress at a glance. */
+mark.markup-span-pending {
+  background: rgba(243, 156, 18, 0.5);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+  outline: 1px dashed var(--markup-accent);
+  outline-offset: 0;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.markup-pin {
+  position: absolute;
+  z-index: 99998;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--markup-accent);
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  border: 2px solid #fff;
+  user-select: none;
+  pointer-events: auto;
+}
+
+.markup-pin:hover {
+  transform: scale(1.1);
+}
+
+.markup-rect {
+  position: absolute;
+  z-index: 99997;
+  border: 2px solid var(--markup-accent);
+  background: rgba(243, 156, 18, 0.12);
+  pointer-events: auto;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.markup-rect:hover {
+  background: rgba(243, 156, 18, 0.22);
+}
+
+.markup-rect-draft {
+  position: absolute;
+  z-index: 99996;
+  border: 2px dashed var(--markup-accent);
+  background: rgba(243, 156, 18, 0.08);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+#markup-toast {
+  position: fixed;
+  bottom: 80px;
+  right: 14px;
+  z-index: 100001;
+  padding: 8px 14px;
+  background: #222;
+  color: #fff;
+  border-radius: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+  max-width: 360px;
+}
+
+#markup-toast.markup-toast-visible {
+  opacity: 1;
+}
+
+#markup-toast.markup-toast-actionable {
+  pointer-events: auto;
+  cursor: pointer !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markup-rect-overlay-cursor {
+  cursor: crosshair !important;
+}
+.markup-rect-overlay-cursor * {
+  cursor: crosshair !important;
+}
+
+.markup-pin-cursor,
+.markup-pin-cursor * {
+  cursor: crosshair !important;
+}
+
+/* Markup's own UI must NOT inherit the crosshair while a mode is active.
+ * These selectors are more specific than the body-class crosshair rules and
+ * use !important to win. Buttons get pointer, text inputs get text. */
+#markup-toolbar,
+#markup-toolbar *,
+#markup-popover,
+#markup-popover *,
+#markup-sidebar,
+#markup-sidebar *,
+#markup-toast,
+#markup-toast * {
+  cursor: default !important;
+}
+#markup-toolbar button,
+#markup-popover button,
+#markup-sidebar button,
+.markup-pin,
+.markup-rect,
+mark.markup-span,
+mark.markup-span-pending,
+#markup-sidebar a,
+#markup-sidebar .markup-sidebar-thumb {
+  cursor: pointer !important;
+}
+#markup-popover textarea,
+#markup-popover input {
+  cursor: text !important;
+}
+
+/* ----- Detached annotations sidebar ----- */
+
+#markup-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 340px;
+  max-width: 90vw;
+  z-index: 99998;
+  background: var(--markup-bg);
+  border-left: 1px solid var(--markup-border);
+  box-shadow: -4px 0 14px rgba(0, 0, 0, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  color: var(--markup-text);
+  font-size: 13px;
+  transform: translateX(100%);
+  transition: transform 220ms ease;
+  display: flex;
+  flex-direction: column;
+}
+#markup-sidebar.markup-sidebar-open {
+  transform: translateX(0);
+}
+.markup-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--markup-border);
+  background: #fff;
+}
+.markup-sidebar-title {
+  font-weight: 600;
+  font-size: 13px;
+  flex: 1;
+}
+.markup-sidebar-count {
+  background: var(--markup-accent);
+  color: #fff;
+  border-radius: 99px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+}
+.markup-sidebar-count:empty {
+  display: none;
+}
+.markup-sidebar-close {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--markup-muted);
+  padding: 0 4px;
+}
+.markup-sidebar-close:hover {
+  color: var(--markup-text);
+}
+.markup-sidebar-sub {
+  padding: 10px 14px;
+  font-size: 11px;
+  color: var(--markup-muted);
+  border-bottom: 1px solid var(--markup-border);
+  background: #fafafa;
+}
+.markup-sidebar-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 8px;
+}
+.markup-sidebar-empty {
+  text-align: center;
+  color: var(--markup-muted);
+  padding: 32px 16px;
+  font-size: 12px;
+}
+.markup-sidebar-entry {
+  background: #fff;
+  border: 1px solid var(--markup-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.markup-sidebar-entry-accepted {
+  opacity: 0.7;
+  background: #f8f6f0;
+}
+
+/* Bulk action row at the top of each section's body */
+.markup-sidebar-bulk {
+  display: flex;
+  gap: 6px;
+  padding: 4px 4px 8px 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px dashed var(--markup-border);
+  flex-wrap: wrap;
+}
+.markup-sidebar-bulk .markup-sidebar-btn {
+  flex: 1;
+  font-size: 10.5px;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+
+/* Sections */
+.markup-sidebar-section {
+  border-top: 1px solid var(--markup-border);
+}
+.markup-sidebar-section:first-child {
+  border-top: 0;
+}
+.markup-sidebar-section-head {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--markup-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.markup-sidebar-section-head:hover {
+  background: #f5f5f5;
+}
+.markup-sidebar-caret {
+  display: inline-block;
+  width: 12px;
+  transition: transform 160ms ease;
+  color: var(--markup-muted);
+}
+.markup-sidebar-section-collapsed .markup-sidebar-caret {
+  transform: rotate(-90deg);
+}
+.markup-sidebar-section-label { flex: 1; }
+.markup-sidebar-section-count {
+  background: var(--markup-border);
+  color: var(--markup-text);
+  border-radius: 99px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.markup-sidebar-section-pending .markup-sidebar-section-count {
+  background: var(--markup-accent);
+  color: #fff;
+}
+.markup-sidebar-section-body {
+  padding: 0 8px 8px 8px;
+}
+.markup-sidebar-section-collapsed .markup-sidebar-section-body {
+  display: none;
+}
+
+/* Status badges */
+.markup-sidebar-status {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: var(--markup-border);
+  color: var(--markup-text);
+}
+.markup-sidebar-status-pending { background: var(--markup-accent); color: #fff; }
+.markup-sidebar-status-open { background: #2e7d32; color: #fff; }
+.markup-sidebar-status-accepted { background: #888; color: #fff; }
+
+/* Banner */
+.markup-sidebar-banner {
+  background: #fff3e0;
+  border-bottom: 1px solid var(--markup-accent-light);
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--markup-text);
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.markup-sidebar-banner-close {
+  background: transparent;
+  border: 1px solid var(--markup-accent);
+  color: var(--markup-accent);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+/* Inline popover Accept button */
+#markup-popover .markup-popover-accept {
+  background: #2e7d32;
+  color: #fff;
+  border-color: #2e7d32;
+}
+#markup-popover .markup-popover-accept:hover { filter: brightness(0.92); }
+.markup-sidebar-entry-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.markup-sidebar-mode {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: #fff;
+}
+.markup-sidebar-mode-span {
+  background: #b07a1a;
+}
+.markup-sidebar-mode-pin {
+  background: var(--markup-accent);
+}
+.markup-sidebar-mode-rect {
+  background: #6b4f1a;
+}
+.markup-sidebar-pin-num {
+  font-size: 10px;
+  color: var(--markup-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.markup-sidebar-when {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--markup-muted);
+}
+.markup-sidebar-note {
+  font-size: 13px;
+  line-height: 1.4;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+.markup-sidebar-context {
+  margin-bottom: 8px;
+}
+.markup-sidebar-quote {
+  font-style: italic;
+  color: var(--markup-muted);
+  font-size: 12px;
+  border-left: 2px solid var(--markup-border);
+  padding-left: 8px;
+  background: #fafafa;
+  padding: 4px 8px;
+  border-radius: 3px;
+}
+.markup-sidebar-thumb {
+  max-width: 100%;
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+  display: block;
+}
+.markup-sidebar-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.markup-sidebar-btn {
+  cursor: pointer;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-family: inherit;
+  background: #f5f5f5;
+  color: var(--markup-text);
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+}
+.markup-sidebar-btn:hover {
+  background: #eaeaea;
+}
+.markup-sidebar-btn-primary {
+  background: var(--markup-accent);
+  color: #fff;
+  border-color: var(--markup-accent);
+}
+.markup-sidebar-btn-primary:hover {
+  filter: brightness(0.92);
+  background: var(--markup-accent);
+}
+.markup-sidebar-btn-danger {
+  color: #c0392b;
+}
+
+#markup-toolbar button.markup-detached-has {
+  background: #fff3e0;
+  border-color: var(--markup-accent-light);
+  font-weight: 600;
+}
+
+/* Context ghost: temporary outline flashed at last-known coords when user
+ * clicks "Where it was" in the sidebar. */
+.markup-context-ghost {
+  position: absolute;
+  z-index: 99995;
+  border: 2px solid var(--markup-accent);
+  background: rgba(243, 156, 18, 0.2);
+  border-radius: 4px;
+  pointer-events: none;
+  box-shadow: 0 0 0 4px rgba(243, 156, 18, 0.18);
+  animation: markup-ghost-pulse 800ms ease-in-out 2;
+  transition: opacity 900ms ease;
+}
+.markup-context-ghost-fade {
+  opacity: 0;
+}
+@keyframes markup-ghost-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(243, 156, 18, 0.18); }
+  50% { box-shadow: 0 0 0 10px rgba(243, 156, 18, 0.08); }
+}

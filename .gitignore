@@ -1,0 +1,5 @@
+node_modules/
+*.feedback.md
+*.feedback.assets/
+tmp/
+.DS_Store
