@@ -8,6 +8,24 @@ Everything runs on localhost. The page is served by a local Node process, the
 overlay talks only to that process, and the source HTML is never modified.
 Nothing is uploaded anywhere.
 
+![An HTML report with a rectangle drawn over a chart, a highlighted phrase, a numbered pin, and the Markup toolbar](docs/assets/annotate.png)
+
+## The loop
+
+```mermaid
+flowchart LR
+    A["agent writes<br>artifact.html"] --> B["markup artifact.html"]
+    B --> C["annotate in the browser<br>text · pin · rect"]
+    C --> D["export bundle<br>markdown + PNGs"]
+    D --> E["paste back<br>to the agent"]
+    E -->|agent revises| A
+```
+
+Markup closes the review loop for agent-produced HTML: instead of describing
+what's wrong ("in the chart section, the caption says..."), you point at it.
+The exported bundle carries the exact text, a CSS path to the element, and a
+cropped screenshot, so the agent knows precisely what you meant.
+
 ## Install
 
 Requires Node 18+.
@@ -43,6 +61,12 @@ markup dash --detach
 # in the background, waits until it's up, prints the URL, and returns
 ```
 
+Try it on the bundled sample report:
+
+```bash
+markup examples/demo.html
+```
+
 ### Ports
 
 `serve` instances start at 7778 and step up on collision. Port 7780 is
@@ -57,12 +81,27 @@ for `--reclaim` and `--port` when something else is squatting on 7780.
 - **Pin** — click any element, drop a numbered pin with a note.
 - **Rect** — shift-drag (or toggle Rect mode) to draw a rectangle; tool screenshots that region and attaches a note.
 
+![A note popover open on a pinned table row, with Remove, Accept, Cancel, and Save buttons](docs/assets/popover.png)
+
 ## Export
 
 - **Export to clipboard** — copies a markdown payload (with inline PNG data-URIs for rectangles) to clipboard. Paste into Claude Code chat.
 - **Export to disk** — writes `<artifact>.feedback.md` and `<artifact>.feedback.assets/*.png` next to the source HTML, then copies the saved `.md` path to clipboard (toast stays clickable to copy again).
 
 The source HTML is never modified.
+
+What the agent gets back (excerpt from a real export of the sample report):
+
+```markdown
+# Feedback: demo.html
+Total annotations: 3
+
+## Span annotations
+- "W10 dips on the release freeze": explain the release freeze inline — readers won't know what froze
+
+## Pin annotations
+- Pin ① on `td` (body > div:nth-of-type(1) > table > tbody > tr:nth-of-type(3) > td:nth-of-type(2)) — text: "At risk": link the rate-limit decision doc here
+```
 
 ## Claude Code skill
 
