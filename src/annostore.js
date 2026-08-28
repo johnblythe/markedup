@@ -36,18 +36,30 @@ function createAnnotationStore(sourcePath) {
   const docPath = path.join(path.dirname(sourcePath), `${stem}.annotations.json`);
   const shotsDir = path.join(path.dirname(sourcePath), `${stem}.shots`);
 
+  // A malformed annotations file must be LOUD and must block writes: reading
+  // it as empty and then writing would silently destroy the whole review.
   function readDoc() {
+    if (!fs.existsSync(docPath)) return { doc: { annotations: [] }, corrupt: false };
     try {
       const parsed = JSON.parse(fs.readFileSync(docPath, "utf-8"));
-      if (Array.isArray(parsed.annotations)) return parsed;
-    } catch (_e) {
-      /* missing or malformed -> empty */
+      if (Array.isArray(parsed.annotations)) return { doc: parsed, corrupt: false };
+      console.error(`markup: ${docPath} has no annotations array — refusing to touch it`);
+    } catch (err) {
+      console.error(`markup: ${docPath} failed to parse — refusing to touch it:`, err.message);
     }
-    return { annotations: [] };
+    return { doc: { annotations: [] }, corrupt: true };
   }
 
+  function corruptError() {
+    return err(500, `annotations file corrupt: ${docPath} — repair or remove it, then retry`);
+  }
+
+  // Atomic replace (write tmp, rename) so a crash or a concurrent reader
+  // never observes a half-written file.
   function writeDoc(doc) {
-    fs.writeFileSync(docPath, JSON.stringify(doc, null, 2), "utf-8");
+    const tmp = `${docPath}.tmp.${process.pid}`;
+    fs.writeFileSync(tmp, JSON.stringify(doc, null, 2), "utf-8");
+    fs.renameSync(tmp, docPath);
   }
 
   function etagOf(doc) {
@@ -56,7 +68,8 @@ function createAnnotationStore(sourcePath) {
   }
 
   function list(ifNoneMatch) {
-    const doc = readDoc();
+    const { doc, corrupt } = readDoc();
+    if (corrupt) return corruptError();
     const etag = etagOf(doc);
     if (ifNoneMatch && ifNoneMatch === etag) return { status: 304, body: null, etag };
     return {
@@ -82,7 +95,8 @@ function createAnnotationStore(sourcePath) {
     }
 
     const now = new Date().toISOString();
-    const doc = readDoc();
+    const { doc, corrupt } = readDoc();
+    if (corrupt) return corruptError();
     const idx = doc.annotations.findIndex((a) => a.id === id);
     const existing = idx === -1 ? null : doc.annotations[idx];
     if (existing && existing.deleted) return err(410, "annotation deleted");
@@ -121,7 +135,8 @@ function createAnnotationStore(sourcePath) {
 
   function tombstone(id, author) {
     if (!isValidAnnotationId(id)) return err(400, "invalid annotation id");
-    const doc = readDoc();
+    const { doc, corrupt } = readDoc();
+    if (corrupt) return corruptError();
     const idx = doc.annotations.findIndex((a) => a.id === id);
     if (idx === -1) return err(404, "annotation not found");
     doc.annotations[idx] = {
@@ -139,7 +154,8 @@ function createAnnotationStore(sourcePath) {
     const text = body && typeof body.text === "string" ? body.text.trim() : "";
     if (!text) return err(400, "text required");
 
-    const doc = readDoc();
+    const { doc, corrupt } = readDoc();
+    if (corrupt) return corruptError();
     const anno = doc.annotations.find((a) => a.id === id && !a.deleted);
     if (!anno) return err(404, "annotation not found");
 

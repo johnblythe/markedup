@@ -160,7 +160,7 @@
 
     toolbar.querySelector('[data-action="clear"]').addEventListener("click", function () {
       var prompt = Persist.isRemote()
-        ? "Delete ALL annotations for this artifact, for every reviewer?"
+        ? "Delete all YOUR annotations on this artifact? (Other reviewers' notes stay.)"
         : "Delete all annotations for this artifact?";
       if (!confirm(prompt)) return;
       document.querySelectorAll(".markup-pin, .markup-rect").forEach(function (n) {

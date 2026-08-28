@@ -7,6 +7,22 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Fixed
+
+- Shared-canvas destructive ops are scoped to your own annotations: deleting
+  someone else's note is refused (deletion tombstones the id forever), and
+  "Clear all" in remote mode clears only yours and says so.
+- The local annotations store writes atomically (temp file + rename) and
+  refuses to touch a corrupt annotations file — a parse failure is loud and
+  returns 500 instead of silently reading as empty and clobbering the review
+  on the next write.
+- `markup serve --multiplayer` refuses to start when another live process
+  already serves the same file in multiplayer mode (two processes would
+  interleave writes on one annotations JSON).
+- The feedback bundle flattens notes, quotes, and replies before
+  interpolating them into markdown, so a malicious note can't forge headings
+  or code fences aimed at the agent consuming the bundle.
+
 ### Added
 
 - Highlighter mode (LD-171): toolbar button + `H` shortcut. Selecting a text

@@ -203,6 +203,62 @@ test(
 );
 
 test(
+  "annotations API: a corrupt file is refused loudly, never clobbered",
+  withServer({}, async ({ base, dir }) => {
+    await api(base, "PUT", "/api/local/report/annotations/anno-e1", { body: PIN });
+    const docPath = path.join(dir, "report.annotations.json");
+    const corrupt = "{definitely not json";
+    fs.writeFileSync(docPath, corrupt);
+
+    const list = await api(base, "GET", "/api/local/report/annotations");
+    assert.strictEqual(list.status, 500);
+    assert.match(list.json.error, /corrupt/);
+
+    const put = await api(base, "PUT", "/api/local/report/annotations/anno-e2", { body: PIN });
+    assert.strictEqual(put.status, 500);
+
+    // The bad bytes are untouched — nothing silently rewrote the review.
+    assert.strictEqual(fs.readFileSync(docPath, "utf-8"), corrupt);
+
+    // Repairing the file brings the API back.
+    fs.writeFileSync(docPath, JSON.stringify({ annotations: [] }));
+    const after = await api(base, "PUT", "/api/local/report/annotations/anno-e2", { body: PIN });
+    assert.strictEqual(after.status, 200);
+  }),
+);
+
+test(
+  "serve --multiplayer refuses a second process on the same file",
+  withServer({}, async ({ sourcePath }) => {
+    // Simulate another live process (the test runner's parent) holding the
+    // file in multiplayer mode; registry entries are one JSON file per port.
+    const instancesDir = path.join(tmpRoot, ".markup", "instances");
+    fs.mkdirSync(instancesDir, { recursive: true });
+    const fakeEntry = path.join(instancesDir, "9999.json");
+    fs.writeFileSync(
+      fakeEntry,
+      JSON.stringify({
+        port: 9999,
+        sourcePath,
+        sourceName: path.basename(sourcePath),
+        pid: process.ppid,
+        startedAt: new Date().toISOString(),
+        kind: "serve",
+        multiplayer: true,
+      }),
+    );
+    try {
+      await assert.rejects(
+        () => startServer(sourcePath, { port: 0, autoOpen: false, multiplayer: true }),
+        /already served in multiplayer/,
+      );
+    } finally {
+      fs.unlinkSync(fakeEntry);
+    }
+  }),
+);
+
+test(
   "multiplayer wrap: remote config injected only with --multiplayer, identity from ?as=",
   withServer({ multiplayer: true }, async ({ base }) => {
     const page = await fetch(`${base}/?as=eng@ld.com`);

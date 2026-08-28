@@ -111,6 +111,22 @@ async function startServer(filePath, opts = {}) {
   // other tooling (the Slack bridge) tests against — but the overlay only
   // uses it when the page was served with multiplayer on.
   const multiplayer = opts.multiplayer === true;
+
+  // Two multiplayer processes on one file would interleave read-modify-write
+  // cycles on the same annotations JSON and silently lose writes. Refuse the
+  // second process (the registry is keyed by port, so check sourcePath).
+  if (multiplayer) {
+    const clash = registry
+      .list()
+      .find(
+        (it) => it.multiplayer && it.sourcePath === sourcePath && it.pid !== process.pid,
+      );
+    if (clash) {
+      throw new Error(
+        `${sourceName} is already served in multiplayer mode by pid ${clash.pid} on port ${clash.port} — annotate there or stop it first`,
+      );
+    }
+  }
   const projectSlug = sourceName
     .replace(/\.[^.]+$/, "")
     .toLowerCase()
@@ -156,6 +172,7 @@ async function startServer(filePath, opts = {}) {
           res.writeHead(304, { ETag: out.etag });
           return res.end();
         }
+        if (out.status !== 200) return sendJSON(res, out.status, out.body);
         const body = JSON.stringify(out.body);
         res.writeHead(out.status, {
           "Content-Type": "application/json; charset=utf-8",
@@ -328,7 +345,7 @@ async function startServer(filePath, opts = {}) {
   const url = `http://127.0.0.1:${actualPort}/`;
 
   // Advertise this instance for `markup list` / `markup dash`.
-  registry.register({ port: actualPort, sourcePath, sourceName, kind: "serve" });
+  registry.register({ port: actualPort, sourcePath, sourceName, kind: "serve", multiplayer });
   registry.installLifecycle(actualPort);
   server.once("close", () => registry.unregister(actualPort));
 

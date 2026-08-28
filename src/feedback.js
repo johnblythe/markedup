@@ -10,8 +10,20 @@ function pinSymbol(n) {
   return `(${n})`;
 }
 
+// Untrusted spans (notes, quotes, replies, authors) are flattened before
+// interpolation: newlines collapse so a note can't forge headings or list
+// structure in the agent-facing markdown, backticks are stripped so it can't
+// open or close code fences, and length is capped.
+const MAX_SPAN_LENGTH = 2000;
+function inline(value) {
+  return String(value == null ? "" : value)
+    .replace(/\r?\n/g, " ")
+    .replace(/`/g, "'")
+    .slice(0, MAX_SPAN_LENGTH);
+}
+
 function who(author) {
-  return author ? String(author).split("@")[0] : "unknown";
+  return author ? inline(String(author).split("@")[0]) : "unknown";
 }
 
 function annotationSuffix(a) {
@@ -24,7 +36,7 @@ function annotationSuffix(a) {
 function replyLines(a, indent) {
   if (!Array.isArray(a.replies) || a.replies.length === 0) return [];
   return a.replies.map(
-    (r) => `${indent}- ↳ ${who(r.author)}${r.via === "slack" ? " (slack)" : ""}: ${r.text || ""}`,
+    (r) => `${indent}- ↳ ${who(r.author)}${r.via === "slack" ? " (slack)" : ""}: ${inline(r.text)}`,
   );
 }
 
@@ -49,8 +61,8 @@ function buildFeedbackMarkdown(annotations, opts) {
   if (spans.length) {
     lines.push("## Span annotations");
     for (const a of spans) {
-      const anchor = (a.payload && a.payload.anchorText ? a.payload.anchorText : "").slice(0, 80);
-      lines.push(`- "${anchor}": ${a.note || "(no note)"}${annotationSuffix(a)}`);
+      const anchor = inline(a.payload && a.payload.anchorText ? a.payload.anchorText : "").slice(0, 80);
+      lines.push(`- "${anchor}": ${inline(a.note) || "(no note)"}${annotationSuffix(a)}`);
       lines.push(...replyLines(a, "  "));
     }
     lines.push("");
@@ -61,11 +73,11 @@ function buildFeedbackMarkdown(annotations, opts) {
     for (const a of pins) {
       const cssPath = (a.anchor && a.anchor.cssPath) || "(unknown)";
       const tag = (a.anchor && a.anchor.tagName) || "?";
-      const anchorText = a.anchor && a.anchor.anchorText ? a.anchor.anchorText.slice(0, 60) : "";
+      const anchorText = a.anchor && a.anchor.anchorText ? inline(a.anchor.anchorText).slice(0, 60) : "";
       lines.push(
-        `- Pin ${pinSymbol(a.pinNum)} on \`${tag}\` (${cssPath})` +
+        `- Pin ${pinSymbol(a.pinNum)} on \`${inline(tag)}\` (${inline(cssPath)})` +
           (anchorText ? ` — text: "${anchorText}"` : "") +
-          `: ${a.note || "(no note)"}${annotationSuffix(a)}`,
+          `: ${inline(a.note) || "(no note)"}${annotationSuffix(a)}`,
       );
       lines.push(...replyLines(a, "  "));
     }
@@ -78,9 +90,9 @@ function buildFeedbackMarkdown(annotations, opts) {
       const cssPath = (a.anchor && a.anchor.cssPath) || "(unknown)";
       const tag = (a.anchor && a.anchor.tagName) || "?";
       const num = a.rectNum || "?";
-      lines.push(`- **Rect ${num}** on \`${tag}\` (${cssPath}):${annotationSuffix(a)}`);
+      lines.push(`- **Rect ${num}** on \`${inline(tag)}\` (${inline(cssPath)}):${annotationSuffix(a)}`);
       lines.push("");
-      lines.push(`  ${a.note || "(no note)"}`);
+      lines.push(`  ${inline(a.note) || "(no note)"}`);
       lines.push(...replyLines(a, "  "));
       lines.push("");
       if (a.shotUrl) {

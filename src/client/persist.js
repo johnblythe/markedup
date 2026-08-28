@@ -323,17 +323,31 @@ var Persist = (function () {
     return anno;
   }
 
+  // Deletion is irreversible on the shared canvas (the server tombstones the
+  // id forever), so destructive ops are scoped to your own annotations. An
+  // annotation with no author yet is a local creation still syncing — yours.
+  function ownsAnnotation(anno) {
+    return !anno.author || anno.author === selfEmail;
+  }
+
   function deleteAnnotation(sourceKey, id) {
     if (!remote) {
       var list = localLoad(sourceKey).filter(function (a) {
         return a.id !== id;
       });
       localSaveAll(sourceKey, list);
-      return;
+      return true;
     }
     var idx = cacheIndex(id);
+    if (idx !== -1 && !ownsAnnotation(cache[idx])) {
+      if (typeof Toast !== "undefined") {
+        Toast.show("Only " + cache[idx].author + " can remove this note", 3000);
+      }
+      return false;
+    }
     if (idx !== -1) cache.splice(idx, 1);
     remoteDelete(id);
+    return true;
   }
 
   function clearAll(sourceKey) {
@@ -341,13 +355,18 @@ var Persist = (function () {
       localSaveAll(sourceKey, []);
       return;
     }
-    var ids = cache.map(function (a) {
-      return a.id;
+    var mine = [];
+    var theirs = [];
+    cache.forEach(function (a) {
+      (ownsAnnotation(a) ? mine : theirs).push(a);
     });
-    cache = [];
-    ids.forEach(function (id) {
-      remoteDelete(id);
+    cache = theirs;
+    mine.forEach(function (a) {
+      remoteDelete(a.id);
     });
+    if (theirs.length && typeof Toast !== "undefined") {
+      Toast.show("Cleared your annotations; " + theirs.length + " from others kept", 3000);
+    }
   }
 
   function nextPinNumber(sourceKey) {
