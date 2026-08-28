@@ -111,6 +111,12 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
   when every annotation is accepted. Uses the `ld slack` CLI; runs laptop-bound,
   no Slack app. Includes an in-memory stub of the multiplayer annotations API
   contract (`test/stub-api.js`) runnable standalone for local testing.
+  Hardened after adversarial review: share/bridge refuse any API origin other
+  than `LDPUB_URL` (https) or localhost and only ever send the service token
+  to the configured origin; sends and reply ingests reconcile against the
+  channel so a landed-but-timed-out call never double-posts; canvas-deleted
+  annotations are pruned; CLI args are positional-safe; `--channel` is
+  slugified; bridge registry keys derive from the channel name.
 
 - `markup <file.html>` as shorthand for `markup serve <file.html>`, flags
   included (`markup brief.html --port 9000`). The `serve` word is implied only

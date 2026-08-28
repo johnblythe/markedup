@@ -12,12 +12,14 @@
 // ingested — advancing it on our own mirrored posts would swallow any human
 // reply that raced in between.
 
+const crypto = require("node:crypto");
 const registry = require("../registry");
 const stateStore = require("./state");
 const format = require("./format");
 const { planActions, planIngest, authorForSlackUser } = require("./plan");
 const defaultSlack = require("./slack-cli");
 const defaultApi = require("./api-client");
+const { assertTrustedOrigin } = require("./api-client");
 
 function ts() {
   return new Date().toISOString().slice(11, 19);
@@ -45,42 +47,106 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
 
   if (res.status === 200) {
     annotations = res.annotations;
-    const { newTopLevel, repliesToMirror, allAccepted } = planActions(annotations, state);
 
-    for (const anno of newTopLevel) {
-      try {
-        const sent = await slack.send(state.channelId, format.topLevelText(anno, state.docUrl));
-        state.annos[anno.id] = {
-          ts: sent.ts,
-          threadCursor: sent.ts,
-          mirroredReplyKeys: {},
-          status: format.annoStatus(anno),
-        };
+    // Annotations deleted on the canvas: drop their mappings so their
+    // threads stop being polled and dead ids can't loop on 404s.
+    const fetchedIds = new Set(annotations.map((a) => a.id));
+    for (const id of Object.keys(state.annos)) {
+      if (!fetchedIds.has(id)) {
+        delete state.annos[id];
         stateStore.save(stateDir, state);
-        posted += 1;
-        log(`posted ${anno.id} (${format.annoLabel(anno)} by ${anno.author}) → thread ${sent.ts}`);
-      } catch (err) {
-        slackWardOk = false;
-        log(`ERROR posting ${anno.id}: ${err.message}`);
+        log(`pruned ${id}: deleted on canvas`);
       }
     }
 
-    for (const { anno, reply, key } of repliesToMirror) {
-      const mapped = state.annos[anno.id];
-      if (!mapped) continue; // top-level post failed this cycle; retry next
+    const { newTopLevel, repliesToMirror, allAccepted } = planActions(annotations, state);
+
+    // Reconcile before posting: a send that landed but timed out locally, or
+    // a crash between send and save, must not double-post. The channel is
+    // the source of truth for which markers already stand. Recent history
+    // suffices — an unsaved-but-landed post is by definition recent.
+    let channelMarkers = null;
+    if (newTopLevel.length) {
       try {
-        const sent = await slack.send(
-          state.channelId,
-          format.mirroredReplyText(anno, reply),
-          mapped.ts,
-        );
-        mapped.mirroredReplyKeys[key] = sent.ts;
-        stateStore.save(stateDir, state);
-        posted += 1;
-        log(`mirrored canvas reply on ${anno.id} → ${sent.ts}`);
+        channelMarkers = format.markerIndex(await slack.history(state.channelId, 200));
       } catch (err) {
         slackWardOk = false;
-        log(`ERROR mirroring reply on ${anno.id}: ${err.message}`);
+        log(`ERROR reading history to reconcile: ${err.message}; deferring new posts`);
+      }
+    }
+
+    if (channelMarkers) {
+      for (const anno of newTopLevel) {
+        const standingTs = channelMarkers.get(anno.id);
+        if (standingTs) {
+          state.annos[anno.id] = {
+            ts: standingTs,
+            threadCursor: standingTs,
+            mirroredReplyKeys: {},
+            status: format.annoStatus(anno),
+          };
+          stateStore.save(stateDir, state);
+          log(`adopted standing post for ${anno.id} (${standingTs})`);
+          continue;
+        }
+        try {
+          const sent = await slack.send(state.channelId, format.topLevelText(anno, state.docUrl));
+          state.annos[anno.id] = {
+            ts: sent.ts,
+            threadCursor: sent.ts,
+            mirroredReplyKeys: {},
+            status: format.annoStatus(anno),
+          };
+          stateStore.save(stateDir, state);
+          posted += 1;
+          log(`posted ${anno.id} (${format.annoLabel(anno)} by ${anno.author}) → thread ${sent.ts}`);
+        } catch (err) {
+          slackWardOk = false;
+          log(`ERROR posting ${anno.id}: ${err.message}`);
+        }
+      }
+    }
+
+    // Same reconcile discipline per thread for mirrored canvas replies.
+    const mirrorsByAnno = new Map();
+    for (const item of repliesToMirror) {
+      const list = mirrorsByAnno.get(item.anno.id) || [];
+      list.push(item);
+      mirrorsByAnno.set(item.anno.id, list);
+    }
+    for (const [annoId, items] of mirrorsByAnno) {
+      const mapped = state.annos[annoId];
+      if (!mapped) continue; // top-level post failed this cycle; retry next
+      let threadMarkers;
+      try {
+        threadMarkers = format.markerIndex(await slack.readThread(state.channelId, mapped.ts));
+      } catch (err) {
+        slackWardOk = false;
+        log(`ERROR reading thread to reconcile ${annoId}: ${err.message}`);
+        continue;
+      }
+      for (const { anno, reply, key } of items) {
+        const standingTs = threadMarkers.get(`r:${annoId}:${key}`);
+        if (standingTs) {
+          mapped.mirroredReplyKeys[key] = standingTs;
+          stateStore.save(stateDir, state);
+          log(`adopted standing mirror on ${annoId} (${standingTs})`);
+          continue;
+        }
+        try {
+          const sent = await slack.send(
+            state.channelId,
+            format.mirroredReplyText(anno, reply),
+            mapped.ts,
+          );
+          mapped.mirroredReplyKeys[key] = sent.ts;
+          stateStore.save(stateDir, state);
+          posted += 1;
+          log(`mirrored canvas reply on ${annoId} → ${sent.ts}`);
+        } catch (err) {
+          slackWardOk = false;
+          log(`ERROR mirroring reply on ${annoId}: ${err.message}`);
+        }
       }
     }
 
@@ -106,6 +172,22 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
     }
     const fresh = planIngest(annoId, messages, mapped);
     for (const msg of fresh) {
+      // A POST that landed but timed out locally must not duplicate the
+      // reply. If the previous cycle failed on exactly this message, check
+      // the fresh annotation snapshot for it before re-sending.
+      if (mapped.pendingIngestTs === msg.ts && annotations) {
+        const current = annotations.find((a) => a.id === annoId);
+        const landed =
+          current &&
+          (current.replies || []).some((r) => r.via === "slack" && r.text === msg.text);
+        if (landed) {
+          mapped.threadCursor = msg.ts;
+          delete mapped.pendingIngestTs;
+          stateStore.save(stateDir, state);
+          log(`reply on ${annoId} (${msg.ts}) had landed; cursor advanced`);
+          continue;
+        }
+      }
       try {
         await api.postReply({
           apiBase: state.apiBase,
@@ -117,10 +199,20 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
           asUser: authorForSlackUser(msg.user, state.people),
         });
         mapped.threadCursor = msg.ts;
+        delete mapped.pendingIngestTs;
         stateStore.save(stateDir, state);
         ingested += 1;
         log(`ingested slack reply on ${annoId} (${msg.ts})`);
       } catch (err) {
+        if (/→ 404$/.test(err.message)) {
+          // Annotation vanished between fetch and post; drop the mapping.
+          delete state.annos[annoId];
+          stateStore.save(stateDir, state);
+          log(`dropped ${annoId}: gone on canvas (404)`);
+          break;
+        }
+        mapped.pendingIngestTs = msg.ts;
+        stateStore.save(stateDir, state);
         log(`ERROR ingesting reply on ${annoId}: ${err.message}`);
         break; // keep cursor short of this message; retry next cycle
       }
@@ -152,6 +244,11 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
 
 const MIN_INTERVAL_MS = 15_000;
 
+function pseudoPortFor(channelName) {
+  const digest = crypto.createHash("sha1").update(String(channelName)).digest();
+  return 70_000 + (digest.readUInt16BE(0) % 9_999);
+}
+
 async function startBridge({
   docUrl,
   channelName,
@@ -176,6 +273,10 @@ async function startBridge({
       `#${channelName} is bound to ${state.docUrl}, not ${docUrl}`,
     );
   }
+  // The persisted apiBase is operator-supplied via `markup share`; re-check
+  // it every start so an old state file can't point the bridge (and the
+  // service token) at an untrusted origin.
+  assertTrustedOrigin(state.apiBase);
 
   if (once) {
     return runCycle({ state, stateDir, slack, api, archiveOnResolve, log });
@@ -187,7 +288,9 @@ async function startBridge({
   );
   // Registry entry so `markup list` / `markup stop` see the daemon. The
   // pseudo-port sits above the TCP range: it is a registry key, not a socket.
-  const pseudoPort = 70_000 + (process.pid % 9_999);
+  // Derived from the channel name so two bridges never collide and a second
+  // bridge for the same doc supersedes the first's entry.
+  const pseudoPort = pseudoPortFor(state.channelName);
   registry.register({
     port: pseudoPort,
     sourcePath: state.docUrl,
@@ -216,4 +319,4 @@ async function startBridge({
   }
 }
 
-module.exports = { runCycle, startBridge, MIN_INTERVAL_MS };
+module.exports = { runCycle, startBridge, pseudoPortFor, MIN_INTERVAL_MS };

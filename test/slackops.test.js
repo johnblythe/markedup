@@ -4,13 +4,40 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
+const http = require("node:http");
+
 const stateStore = require("../src/slackops/state");
 const format = require("../src/slackops/format");
 const { planActions, planIngest, authorForSlackUser } = require("../src/slackops/plan");
-const { runCycle } = require("../src/slackops/bridge");
-const { shareDoc, channelNameFor, slugify } = require("../src/slackops/share");
-const { parseDocUrl } = require("../src/slackops/api-client");
+const { runCycle, pseudoPortFor } = require("../src/slackops/bridge");
+const { shareDoc, channelNameFor, slugify, fetchDocTitle } = require("../src/slackops/share");
+const { parseDocUrl, assertTrustedOrigin, authHeaders } = require("../src/slackops/api-client");
+const { buildArgs } = require("../src/slackops/slack-cli");
 const { startStub } = require("./stub-api");
+
+function withEnv(overrides, fn) {
+  const saved = {};
+  for (const [k, v] of Object.entries(overrides)) {
+    saved[k] = process.env[k];
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  const restore = () => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  };
+  try {
+    const out = fn();
+    if (out && typeof out.finally === "function") return out.finally(restore);
+    restore();
+    return out;
+  } catch (e) {
+    restore();
+    throw e;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // fakes
@@ -36,6 +63,9 @@ function fakeSlack() {
     },
     async readThread(_channelId, threadTs) {
       return threads.get(threadTs) || [];
+    },
+    async history(_channelId, _limit) {
+      return [...threads.values()].map((arr) => arr[0]);
     },
     async archive() {
       slack.archived = true;
@@ -265,6 +295,229 @@ test("archiveOnResolve false leaves the channel open", async () => {
   await runCycle({ state, stateDir, slack, api, archiveOnResolve: false, ...quiet });
   assert.equal(slack.archived, false);
   assert.equal(state.archived, false);
+});
+
+// ---------------------------------------------------------------------------
+// adversarial-review fixes
+
+test("assertTrustedOrigin: localhost and LDPUB_URL pass, everything else refuses", () => {
+  withEnv({ LDPUB_URL: "https://ldpub.example.dev" }, () => {
+    assertTrustedOrigin("http://127.0.0.1:7999");
+    assertTrustedOrigin("http://localhost:8080");
+    assertTrustedOrigin("https://ldpub.example.dev");
+    assert.throws(() => assertTrustedOrigin("https://ldpub-example.dev"), /refusing/);
+    assert.throws(() => assertTrustedOrigin("https://evil.dev"), /refusing/);
+  });
+  // An http LDPUB_URL is not a trusted remote.
+  withEnv({ LDPUB_URL: "http://ldpub.example.dev" }, () => {
+    assert.throws(() => assertTrustedOrigin("http://ldpub.example.dev"), /refusing/);
+  });
+  withEnv({ LDPUB_URL: undefined }, () => {
+    assert.throws(() => assertTrustedOrigin("https://anything.dev"), /LDPUB_URL/);
+  });
+});
+
+test("authHeaders: service token only ever goes to the configured origin", () => {
+  withEnv(
+    {
+      LDPUB_URL: "https://ldpub.example.dev",
+      LDPUB_CLIENT_ID: "test-id",
+      LDPUB_CLIENT_SECRET: "test-secret",
+    },
+    () => {
+      const good = authHeaders("me@x.co", "https://ldpub.example.dev");
+      assert.equal(good["CF-Access-Client-Id"], "test-id");
+      assert.equal(good["X-Markup-User"], "me@x.co");
+      const bad = authHeaders("me@x.co", "https://evil.dev");
+      assert.ok(!("CF-Access-Client-Id" in bad), "no token for a foreign origin");
+      assert.ok(!("CF-Access-Client-Secret" in bad));
+      assert.equal(bad["X-Markup-User"], "me@x.co");
+    },
+  );
+});
+
+test("shareDoc refuses a look-alike origin before persisting anything", async () => {
+  const stateDir = tmpDir();
+  await withEnv({ LDPUB_URL: "https://ldpub.example.dev" }, () =>
+    assert.rejects(
+      shareDoc({
+        docUrl: "https://ldpub-example.dev/eng/audit/",
+        test: true,
+        stateDir,
+        slack: fakeSlack(),
+        log: () => {},
+      }),
+      /refusing/,
+    ),
+  );
+  assert.equal(fs.readdirSync(stateDir).length, 0, "no state persisted");
+});
+
+test("reconcile adopts a standing channel post instead of re-posting", async () => {
+  const stateDir = tmpDir();
+  const state = freshState(stateDir);
+  const slack = fakeSlack();
+  // A previous run posted anno-a but died before saving its state.
+  const orphan = await slack.send("CTEST", "orphan\n[md:anno-a]");
+  const api = fakeApi([anno("anno-a")]);
+
+  const result = await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  assert.equal(result.posted, 0);
+  assert.equal(slack.sends.length, 1, "no second post");
+  assert.equal(state.annos["anno-a"].ts, orphan.ts);
+});
+
+test("reconcile adopts a standing mirrored reply", async () => {
+  const stateDir = tmpDir();
+  const state = freshState(stateDir);
+  const slack = fakeSlack();
+  const api = fakeApi([anno("anno-a")]);
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  const topTs = state.annos["anno-a"].ts;
+
+  const reply = { author: "j@x.co", text: "mirror me", at: "t1", via: "canvas" };
+  const key = format.replyKey(reply);
+  const standing = await slack.send("CTEST", `j@x.co (canvas):\nmirror me\n[md:r:anno-a:${key}]`, topTs);
+  const before = slack.sends.length;
+
+  api.annos.get("anno-a").replies.push(reply);
+  api.bump();
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  assert.equal(slack.sends.length, before, "standing mirror adopted, not re-sent");
+  assert.equal(state.annos["anno-a"].mirroredReplyKeys[key], standing.ts);
+});
+
+test("ingest survives a landed-but-timed-out POST without duplicating", async () => {
+  const stateDir = tmpDir();
+  const state = freshState(stateDir);
+  const slack = fakeSlack();
+  const api = fakeApi([anno("anno-a")]);
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  slack.addHuman(state.annos["anno-a"].ts, "double-post check", "2000.000001");
+
+  // The POST lands server-side but the call reports failure (timeout).
+  const realPost = api.postReply;
+  api.postReply = async (opts) => {
+    await realPost(opts);
+    throw new Error("fetch timeout");
+  };
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  assert.equal(state.annos["anno-a"].pendingIngestTs, "2000.000001");
+  assert.equal(api.annos.get("anno-a").replies.length, 1);
+
+  api.postReply = realPost;
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  assert.equal(api.annos.get("anno-a").replies.length, 1, "not duplicated");
+  assert.equal(state.annos["anno-a"].threadCursor, "2000.000001");
+  assert.equal(state.annos["anno-a"].pendingIngestTs, undefined);
+});
+
+test("ingest re-posts after a POST that truly failed", async () => {
+  const stateDir = tmpDir();
+  const state = freshState(stateDir);
+  const slack = fakeSlack();
+  const api = fakeApi([anno("anno-a")]);
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  slack.addHuman(state.annos["anno-a"].ts, "flaky network", "2000.000001");
+
+  const realPost = api.postReply;
+  api.postReply = async () => {
+    throw new Error("network down");
+  };
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  assert.equal(api.annos.get("anno-a").replies.length, 0);
+  assert.equal(state.annos["anno-a"].pendingIngestTs, "2000.000001");
+
+  api.postReply = realPost;
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  assert.equal(api.annos.get("anno-a").replies.length, 1, "delivered on retry");
+  assert.equal(state.annos["anno-a"].threadCursor, "2000.000001");
+});
+
+test("annotations deleted on canvas are pruned from state", async () => {
+  const stateDir = tmpDir();
+  const state = freshState(stateDir);
+  const slack = fakeSlack();
+  const api = fakeApi([anno("anno-a"), anno("anno-b")]);
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  assert.ok(state.annos["anno-a"]);
+
+  api.annos.delete("anno-a");
+  api.bump();
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  assert.equal(state.annos["anno-a"], undefined, "pruned");
+  assert.ok(state.annos["anno-b"], "survivor untouched");
+  const reloaded = stateStore.load(stateDir, state.channelName);
+  assert.equal(reloaded.annos["anno-a"], undefined, "prune persisted");
+});
+
+test("404 on reply ingest drops the mapping instead of looping", async () => {
+  const stateDir = tmpDir();
+  const state = freshState(stateDir);
+  const slack = fakeSlack();
+  const api = fakeApi([anno("anno-a")]);
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  slack.addHuman(state.annos["anno-a"].ts, "too late", "2000.000001");
+
+  api.postReply = async ({ annoId }) => {
+    throw new Error(`POST reply on ${annoId} → 404`);
+  };
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
+  assert.equal(state.annos["anno-a"], undefined, "mapping dropped");
+});
+
+test("fetchDocTitle: same-origin title read, off-origin redirect rejected", async () => {
+  const target = http.createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end("<html><head><title>Board Audit</title></head><body></body></html>");
+  });
+  await new Promise((r) => target.listen(0, "127.0.0.1", r));
+  const targetPort = target.address().port;
+  const bouncer = http.createServer((_req, res) => {
+    res.writeHead(302, { Location: `http://127.0.0.1:${targetPort}/login` });
+    res.end();
+  });
+  await new Promise((r) => bouncer.listen(0, "127.0.0.1", r));
+  try {
+    assert.equal(await fetchDocTitle(`http://127.0.0.1:${targetPort}/eng/audit/`), "Board Audit");
+    assert.equal(
+      await fetchDocTitle(`http://127.0.0.1:${bouncer.address().port}/eng/audit/`),
+      null,
+      "login-wall title must not leak onto the card",
+    );
+  } finally {
+    target.close();
+    bouncer.close();
+  }
+});
+
+test("buildArgs: flags precede a -- guard so text can't parse as flags", () => {
+  assert.deepEqual(buildArgs("send", ["--thread", "1.2"], ["C1", "--help"]), [
+    "send",
+    "--output",
+    "json",
+    "--thread",
+    "1.2",
+    "--",
+    "C1",
+    "--help",
+  ]);
+});
+
+test("channelNameFor: --channel is slugified, no path traversal", () => {
+  const name = channelNameFor({ user: "e", project: "p", channelOverride: "../../../../tmp/pwn" });
+  assert.equal(name, "tmp-pwn");
+  assert.ok(!name.includes("/") && !name.includes(".."));
+  assert.ok(!stateStore.stateFile("/x", name).includes(".."));
+});
+
+test("pseudoPortFor: deterministic, in range, distinct per channel", () => {
+  const a = pseudoPortFor("markd-test-eng-audit");
+  const b = pseudoPortFor("markd-test-other-doc");
+  assert.equal(a, pseudoPortFor("markd-test-eng-audit"));
+  assert.ok(a >= 70_000 && a < 80_000);
+  assert.ok(b >= 70_000 && b < 80_000);
+  assert.notEqual(a, b);
 });
 
 // ---------------------------------------------------------------------------

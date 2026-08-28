@@ -29,7 +29,8 @@ function emptyState({ docUrl, apiBase, user, project, channelName }) {
     // email → { id, name } for people invited via `markup share`; used to
     // attribute Slack replies back to a human-readable author.
     people: {},
-    // annoId → { ts, mirroredReplyKeys: { key: slackTs }, threadCursor, status }
+    // annoId → { ts, mirroredReplyKeys: { key: slackTs }, threadCursor,
+    //            status, pendingIngestTs? }
     annos: {},
   };
 }

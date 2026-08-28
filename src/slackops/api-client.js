@@ -27,10 +27,52 @@ function parseDocUrl(docUrl) {
   return { apiBase: url.origin, user, project };
 }
 
-function authHeaders(asUser) {
+// The doc URL is operator-supplied, so it controls where the bridge sends
+// requests. Only two origins are ever contacted: localhost (stub / local
+// serve) and the configured ldpub origin from LDPUB_URL (https only). The
+// service token is attached only to the latter — never to an origin that
+// merely appeared in a pasted URL.
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+function configuredRemoteOrigin() {
+  const raw = process.env.LDPUB_URL;
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" ? url.origin : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function isLocalOrigin(apiBase) {
+  try {
+    return LOCAL_HOSTS.has(new URL(apiBase).hostname);
+  } catch (_e) {
+    return false;
+  }
+}
+
+function assertTrustedOrigin(apiBase) {
+  if (isLocalOrigin(apiBase)) return;
+  const remote = configuredRemoteOrigin();
+  if (remote && apiBase === remote) return;
+  throw new Error(
+    `refusing ${apiBase}: not localhost or the configured ldpub origin` +
+      (remote ? ` (${remote})` : " (LDPUB_URL is unset or not https)"),
+  );
+}
+
+function authHeaders(asUser, apiBase) {
   const headers = {};
   if (asUser) headers["X-Markup-User"] = asUser;
-  if (process.env.LDPUB_CLIENT_ID && process.env.LDPUB_CLIENT_SECRET) {
+  const remote = configuredRemoteOrigin();
+  if (
+    remote &&
+    apiBase === remote &&
+    process.env.LDPUB_CLIENT_ID &&
+    process.env.LDPUB_CLIENT_SECRET
+  ) {
     headers["CF-Access-Client-Id"] = process.env.LDPUB_CLIENT_ID;
     headers["CF-Access-Client-Secret"] = process.env.LDPUB_CLIENT_SECRET;
   }
@@ -38,7 +80,8 @@ function authHeaders(asUser) {
 }
 
 async function fetchAnnotations({ apiBase, user, project, etag, asUser }) {
-  const headers = authHeaders(asUser);
+  assertTrustedOrigin(apiBase);
+  const headers = authHeaders(asUser, apiBase);
   if (etag) headers["If-None-Match"] = etag;
   const res = await fetch(`${apiBase}/api/${user}/${project}/annotations`, {
     headers,
@@ -55,11 +98,12 @@ async function fetchAnnotations({ apiBase, user, project, etag, asUser }) {
 }
 
 async function postReply({ apiBase, user, project, annoId, text, via, asUser }) {
+  assertTrustedOrigin(apiBase);
   const res = await fetch(
     `${apiBase}/api/${user}/${project}/annotations/${encodeURIComponent(annoId)}/replies`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders(asUser) },
+      headers: { "Content-Type": "application/json", ...authHeaders(asUser, apiBase) },
       body: JSON.stringify({ text, via: via || "slack" }),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     },
@@ -68,4 +112,10 @@ async function postReply({ apiBase, user, project, annoId, text, via, asUser }) 
   return res.json();
 }
 
-module.exports = { parseDocUrl, fetchAnnotations, postReply };
+module.exports = {
+  parseDocUrl,
+  fetchAnnotations,
+  postReply,
+  authHeaders,
+  assertTrustedOrigin,
+};

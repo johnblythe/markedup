@@ -7,6 +7,12 @@ the channel, and replies in those threads land back on the annotated page.
 Requires the `ld` CLI (`~/code/research/ld`) with a live Slack session; the
 bridge posts as the logged-in user. No Slack app or bot token involved.
 
+For a remote doc the environment must provide `LDPUB_URL` plus
+`LDPUB_CLIENT_ID` / `LDPUB_CLIENT_SECRET` (the ldpub service token), e.g. by
+sourcing `~/code/ldpub/.env`. Both commands refuse any origin other than
+`LDPUB_URL` (https) or localhost, and the service token is only ever sent to
+the `LDPUB_URL` origin.
+
 ## Share
 
 ```bash
@@ -32,9 +38,10 @@ markup bridge https://<host>/eng/board-audit/
 - Polls the doc's annotations API every 30 s (`--interval <seconds>`, min 15).
 - New annotation → one top-level message in the channel: author, what it
   points at, the note, a link to the doc.
-- Replies typed in that Slack thread → appear on the annotation in the page,
-  attributed via the invite list (`--to` emails), tagged `via slack`.
-- Replies made on the page → appear in the Slack thread.
+- Replies typed in that Slack thread → appear under the annotation on the
+  page, attributed via the invite list (`--to` emails), tagged `via slack`.
+  The page displays replies; it has no reply box, so the conversation lives
+  in Slack.
 - When every annotation is accepted the bridge posts a summary, archives the
   channel, and exits. `--no-archive` leaves the channel open.
 - `--once` runs a single sync cycle and exits (useful for cron or checks).
@@ -48,8 +55,8 @@ markup bridge https://<host>/eng/board-audit/
 1. Publish the doc (see the multiplayer canvas docs) and `markup share` it.
 2. Start `markup bridge` and leave it running.
 3. Reviewers annotate the page; the channel fills with one thread per note.
-4. Anyone answers in Slack or on the page; both sides see the whole
-   conversation.
+4. Answer in the Slack threads; each reply shows up under its annotation on
+   the page.
 5. Accept annotations on the page as they are addressed; when the last one
    is accepted, the channel archives itself and the bridge exits.
 

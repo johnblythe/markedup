@@ -6,7 +6,7 @@ const os = require("node:os");
 const stateStore = require("./state");
 const format = require("./format");
 const defaultSlack = require("./slack-cli");
-const { parseDocUrl } = require("./api-client");
+const { parseDocUrl, assertTrustedOrigin, authHeaders } = require("./api-client");
 
 const PREFIX = "markd-";
 const TEST_PREFIX = "markd-test-";
@@ -21,15 +21,27 @@ function slugify(raw) {
 }
 
 function channelNameFor({ user, project, test, channelOverride }) {
-  if (channelOverride) return channelOverride.replace(/^#/, "");
+  if (channelOverride) {
+    // Slugified so the name is Slack-legal and can't traverse out of the
+    // state directory (the state file is named after the channel).
+    const clean = slugify(channelOverride.replace(/^#/, "")).slice(0, MAX_NAME);
+    if (clean) return clean;
+  }
   const prefix = test ? TEST_PREFIX : PREFIX;
   return `${prefix}${slugify(`${user}-${project}`)}`.slice(0, MAX_NAME);
 }
 
 async function fetchDocTitle(docUrl) {
   try {
-    const res = await fetch(docUrl, { signal: AbortSignal.timeout(8_000) });
+    const origin = new URL(docUrl).origin;
+    const res = await fetch(docUrl, {
+      headers: authHeaders(null, origin),
+      signal: AbortSignal.timeout(8_000),
+    });
     if (!res.ok) return null;
+    // An auth wall redirects off-origin (e.g. Cloudflare Access login);
+    // its page title must not end up on the share card.
+    if (new URL(res.url).origin !== origin) return null;
     const html = await res.text();
     const match = html.match(/<title[^>]*>([^<]*)<\/title>/i);
     return match ? match[1].trim().slice(0, 120) || null : null;
@@ -49,6 +61,8 @@ async function shareDoc({
   log = console.log,
 }) {
   const { apiBase, user, project } = parseDocUrl(docUrl);
+  // Refuse untrusted origins before anything is persisted or contacted.
+  assertTrustedOrigin(apiBase);
   const channelName = channelNameFor({ user, project, test, channelOverride });
 
   let state =
@@ -130,4 +144,4 @@ async function shareDoc({
   return { channelId: state.channelId, channelName, stateFile: stateStore.stateFile(stateDir, channelName) };
 }
 
-module.exports = { shareDoc, channelNameFor, slugify, PREFIX, TEST_PREFIX };
+module.exports = { shareDoc, channelNameFor, slugify, fetchDocTitle, PREFIX, TEST_PREFIX };

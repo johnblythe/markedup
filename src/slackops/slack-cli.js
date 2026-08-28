@@ -15,11 +15,17 @@ const LD_BIN =
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
+// Flags first, then `--`, then positionals, so operator-supplied text (a note
+// starting with "-", an email, a channel name) can never parse as a flag.
+function buildArgs(sub, flags, positionals) {
+  return [sub, "--output", "json", ...flags, "--", ...positionals];
+}
+
 function run(args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   return new Promise((resolve, reject) => {
     execFile(
       LD_BIN,
-      ["slack", ...args, "--output", "json"],
+      ["slack", ...args],
       { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 },
       (err, stdout, stderr) => {
         if (err) {
@@ -38,60 +44,60 @@ function run(args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
 }
 
 async function createChannel(name) {
-  const res = await run(["create-channel", name, "--private"]);
+  const res = await run(buildArgs("create-channel", ["--private"], [name]));
   if (!res.channel_id) throw new Error(`create-channel returned no channel_id for ${name}`);
   return { channelId: res.channel_id, name: res.name || name };
 }
 
 async function send(channelId, text, threadTs) {
-  const args = ["send", channelId, text];
-  if (threadTs) args.push("--thread", String(threadTs));
-  const res = await run(args);
+  const flags = threadTs ? ["--thread", String(threadTs)] : [];
+  const res = await run(buildArgs("send", flags, [channelId, text]));
   if (!res.ok || !res.ts) throw new Error(`send to ${channelId} not ok`);
   return { ts: res.ts, threadTs: res.thread_ts || null };
 }
 
 // Returns the thread's messages, including the top-level message itself.
 async function readThread(channelId, threadTs) {
-  const res = await run(["thread", `${channelId}/${threadTs}`, "--ttl", "0"]);
+  const res = await run(buildArgs("thread", ["--ttl", "0"], [`${channelId}/${threadTs}`]));
   return Array.isArray(res.messages) ? res.messages : [];
 }
 
 async function history(channelId, limit = 100) {
-  const res = await run(["history", channelId, "--limit", String(limit), "--ttl", "0"]);
+  const res = await run(buildArgs("history", ["--ttl", "0", "--limit", String(limit)], [channelId]));
   return Array.isArray(res.messages) ? res.messages : [];
 }
 
 async function invite(channelId, emails) {
   if (!emails.length) return null;
-  return run(["invite", channelId, ...emails]);
+  return run(buildArgs("invite", [], [channelId, ...emails]));
 }
 
 async function setTopic(channelId, topic) {
-  return run(["set-topic", channelId, topic]);
+  return run(buildArgs("set-topic", [], [channelId, topic]));
 }
 
 async function archive(channelId) {
-  return run(["archive", channelId]);
+  return run(buildArgs("archive", [], [channelId]));
 }
 
 async function unarchive(channelId) {
-  return run(["unarchive", channelId]);
+  return run(buildArgs("unarchive", [], [channelId]));
 }
 
 async function userByEmail(email) {
-  const res = await run(["user", email, "--ttl", "0"]);
+  const res = await run(buildArgs("user", ["--ttl", "0"], [email]));
   return res && res.user_id ? { id: res.user_id, name: res.name || null } : null;
 }
 
 async function channelInfo(nameOrId) {
-  const res = await run(["channel-info", nameOrId, "--ttl", "0"]);
+  const res = await run(buildArgs("channel-info", ["--ttl", "0"], [nameOrId]));
   const id = res.channel_id || res.id;
   return id ? { channelId: id, name: res.name || nameOrId } : null;
 }
 
 module.exports = {
   LD_BIN,
+  buildArgs,
   createChannel,
   send,
   readThread,

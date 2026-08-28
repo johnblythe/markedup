@@ -14,6 +14,22 @@ function isBridgeMessage(text) {
   return MARKER_RE.test(text || "");
 }
 
+// Marker token → ts of the message carrying it, for reconciling what already
+// stands in the channel before posting (a send that landed but timed out
+// locally must not double-post).
+const MARKER_ALL_RE = /\[md:([^\]]+)\]/g;
+
+function markerIndex(messages) {
+  const map = new Map();
+  for (const msg of messages || []) {
+    if (!msg || !msg.ts || !msg.text) continue;
+    for (const m of msg.text.matchAll(MARKER_ALL_RE)) {
+      if (!map.has(m[1])) map.set(m[1], msg.ts);
+    }
+  }
+  return map;
+}
+
 function stripCliSuffix(text) {
   return (text || "").replace(VIA_SUFFIX_RE, "").trim();
 }
@@ -123,6 +139,7 @@ function summaryText(annotations) {
 module.exports = {
   MARKER_RE,
   isBridgeMessage,
+  markerIndex,
   stripCliSuffix,
   unescapeSlackText,
   replyKey,
