@@ -19,6 +19,26 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
   popover. Renders as a red strikethrough; clicking an existing strike
   reopens the popover to add a reason or remove it. Exports as
   `[DELETE] "<span text>"` in both the clipboard and disk bundles.
+- **Shared canvas (multiplayer).** The overlay's storage layer is now a
+  dual driver: localStorage by default (unchanged), or a remote driver
+  syncing through the Marked Up annotations API when the wrapper injects
+  `__MARKUP_REMOTE__`. Remote mode hydrates before boot, polls with
+  ETag/If-None-Match every ~10 s (paused while a popover is open), stamps
+  authors server-side, renders other reviewers' marks violet with author
+  tooltips, and shows reply threads in the sidebar.
+- `markup publish <file>` — publish an artifact to the ldpub Worker
+  (Cloudflare Access gated) and print the shared canvas URL; also refreshes
+  the overlay assets the Worker injects. `markup pull <url>` — fetch the
+  shared annotation set and write the standard feedback bundle, now with
+  authors, states, and reply threads (`src/feedback.js`).
+- `markup serve --multiplayer` — local shared canvas: annotations persist
+  in `<source>.annotations.json` and sync across tabs; per-tab identity via
+  `?as=you@example`. The contract's HTTP API (`/api/{user}/{project}/…`)
+  is mounted on every serve instance (`src/annostore.js`), identity via
+  `X-Markup-User`, so it doubles as the integration stub for bridge tooling.
+- Rect screenshots on a shared canvas upload as PNGs to the shots endpoint
+  (`shotUrl`) instead of traveling inline; other reviewers' thumbnails load
+  from the server.
 - `markup <file.html>` as shorthand for `markup serve <file.html>`, flags
   included (`markup brief.html --port 9000`). The `serve` word is implied only
   when the first argument is not a known subcommand and an `.html` argument is

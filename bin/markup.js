@@ -73,6 +73,11 @@ program
     `port to listen on (default: ${SERVE_PORT}, steps up when busy)`,
   )
   .option("--no-open", "do not auto-open the browser")
+  .option(
+    "--multiplayer",
+    "shared annotations: store next to the source file and sync every open tab " +
+      "(identity via ?as=you@example in the page URL)",
+  )
   .action(async (file, opts) => {
     const resolved = path.resolve(file);
     if (!fs.existsSync(resolved)) {
@@ -98,9 +103,52 @@ program
       }
     }
     try {
-      const { url } = await startServer(resolved, { port, autoOpen: opts.open !== false });
+      const { url } = await startServer(resolved, {
+        port,
+        autoOpen: opts.open !== false,
+        multiplayer: opts.multiplayer === true,
+      });
       console.log(`markup: serving ${path.basename(resolved)} at ${url}`);
       console.log(`markup: press Ctrl+C to stop`);
+    } catch (err) {
+      console.error(`markup: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("publish <file>")
+  .description("Publish an HTML file to the shared canvas (ldpub) and print its URL")
+  .option("--title <title>", "human title shown in listings (default: file stem)")
+  .option("--user <user>", "namespace user segment (default: LDPUB_USER or $USER)")
+  .option("--project <project>", "project slug (default: kebab-cased file stem)")
+  .action(async (file, opts) => {
+    try {
+      const { publish } = require("../src/publish");
+      const result = await publish(file, opts);
+      console.log(`markup: published "${result.title}"`);
+      console.log(`markup: shared canvas at ${result.url}`);
+      console.log("markup: reviewers annotate right on that page; pull feedback with:");
+      console.log(`markup:   markup pull ${result.url}`);
+    } catch (err) {
+      console.error(`markup: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("pull <url>")
+  .description("Fetch shared-canvas annotations and write the feedback bundle (md + PNGs)")
+  .option("--dir <dir>", "directory to write the bundle into (default: cwd)")
+  .action(async (url, opts) => {
+    try {
+      const { pull } = require("../src/publish");
+      const result = await pull(url, opts);
+      console.log(`markup: pulled ${result.count} annotation(s)`);
+      console.log(`markup: wrote ${result.feedbackPath}`);
+      if (result.assets && result.assets.length) {
+        console.log(`markup: + ${result.assets.length} screenshot(s) in ${result.assetsDir}`);
+      }
     } catch (err) {
       console.error(`markup: ${err.message}`);
       process.exit(1);

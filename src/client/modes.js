@@ -55,9 +55,12 @@ var Modes = (function () {
     // Source-change detection: if the source hash changed since the last
     // review, bump every still-open annotation to pending so the user
     // explicitly triages each one against the new version.
+    // Remote mode skips the per-browser triage bump: the annotation set is
+    // shared, so one viewer's localStorage hash must not flip everyone's
+    // annotations to pending. Server-side republish triage is a follow-up.
     var currentHash = window.__MARKUP_SOURCE_HASH__ || "";
     var lastHash = Persist.getLastHash(sourceKey);
-    var sourceChanged = lastHash && currentHash && lastHash !== currentHash;
+    var sourceChanged = !Persist.isRemote() && lastHash && currentHash && lastHash !== currentHash;
     if (sourceChanged) {
       list.forEach(function (a) {
         var status = a.status || "open";
@@ -100,6 +103,7 @@ var Modes = (function () {
         renderRect(anno);
         rendered = true;
       }
+      if (rendered) decorateAuthored(anno);
       if (!rendered) {
         anno.status = "pending";
         anno.carryReason = "anchor-lost";
@@ -131,6 +135,22 @@ var Modes = (function () {
       window.__MARKUP_UPDATE_SIDEBAR_COUNT__();
     }
     return changed;
+  }
+
+  // Shared canvas: mark inline artifacts (pin badge, span mark, rect box)
+  // with their author. Someone else's annotations get a distinct look.
+  function decorateAuthored(anno) {
+    if (!Persist.isRemote() || !anno.author) return;
+    // Scope to inline artifacts — the sidebar's entries carry the same
+    // data-anno-id and would otherwise shadow the pin in document order.
+    var id = anno.id.replace(/"/g, "");
+    var el = document.querySelector(
+      '.markup-pin[data-anno-id="' + id + '"], mark.markup-span[data-anno-id="' + id + '"], ' +
+        '.markup-rect[data-anno-id="' + id + '"]',
+    );
+    if (!el) return;
+    el.setAttribute("title", anno.author + (anno.note ? " — " + anno.note : ""));
+    if (anno.author !== Persist.self()) el.classList.add("markup-authored-other");
   }
 
   // --- Annotation lifecycle actions (used by sidebar + inline popover) -----

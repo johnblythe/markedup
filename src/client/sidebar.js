@@ -120,6 +120,31 @@ var Sidebar = (function () {
     top.appendChild(when);
     entry.appendChild(top);
 
+    // Shared canvas: say whose note this is, and surface any thread on it.
+    if (anno.author) {
+      var byline = document.createElement("div");
+      byline.className = "markup-sidebar-author";
+      var name = String(anno.author).split("@")[0];
+      byline.textContent =
+        name +
+        (anno.replies && anno.replies.length
+          ? " · " + anno.replies.length + " repl" + (anno.replies.length === 1 ? "y" : "ies")
+          : "");
+      byline.setAttribute("title", anno.author);
+      entry.appendChild(byline);
+    }
+    if (anno.replies && anno.replies.length) {
+      var thread = document.createElement("div");
+      thread.className = "markup-sidebar-thread";
+      anno.replies.forEach(function (r) {
+        var line = document.createElement("div");
+        line.className = "markup-sidebar-reply";
+        line.textContent = String(r.author || "?").split("@")[0] + ": " + (r.text || "");
+        thread.appendChild(line);
+      });
+      entry.appendChild(thread);
+    }
+
     var note = document.createElement("div");
     note.className = "markup-sidebar-note";
     note.textContent = anno.note || "(no note)";
@@ -127,10 +152,11 @@ var Sidebar = (function () {
 
     var ctx = document.createElement("div");
     ctx.className = "markup-sidebar-context";
-    if (anno.mode === "rect" && anno.payload && anno.payload.pngDataURL) {
+    if (anno.mode === "rect" && ((anno.payload && anno.payload.pngDataURL) || anno.shotUrl)) {
       var img = document.createElement("img");
       img.className = "markup-sidebar-thumb";
-      img.src = anno.payload.pngDataURL;
+      // Local data URL when this browser took the shot; shotUrl for everyone else.
+      img.src = (anno.payload && anno.payload.pngDataURL) || anno.shotUrl;
       img.alt = "rect screenshot";
       ctx.appendChild(img);
     } else {

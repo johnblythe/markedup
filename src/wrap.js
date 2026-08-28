@@ -37,6 +37,9 @@ function escapeHTML(str) {
 //   key:        absolute source path, exposed as window.__MARKUP_KEY__
 //   sourceName: basename, exposed as window.__MARKUP_SOURCE_NAME__
 //   styles:     inline CSS string (overlay styles)
+//   remote:     { user, project, identity? } — emitted as __MARKUP_REMOTE__,
+//               switching the overlay's persistence to the annotations API
+//               (multiplayer mode)
 function wrapHTML(rawHTML, opts = {}) {
   // Idempotent: if already wrapped, return unchanged.
   if (rawHTML.includes(`${WRAP_MARKER}="true"`)) {
@@ -68,11 +71,23 @@ function wrapHTML(rawHTML, opts = {}) {
   // Bootstrap script + external client scripts go near </body>.
   // The marker attribute on the bootstrap script is what re-wrap detection looks for.
   const sourceHash = opts.sourceHash || "";
+  // JSON.stringify leaves "<" intact, so "</script>" inside a value (e.g. a
+  // crafted ?as= identity) would terminate the bootstrap tag. Escape it.
+  const jsonForScript = (value) => JSON.stringify(value).replace(/</g, "\\u003c");
+  const remoteLine = opts.remote
+    ? `  window.__MARKUP_REMOTE__ = ${jsonForScript({
+        base: "",
+        user: opts.remote.user,
+        project: opts.remote.project,
+        identity: opts.remote.identity || undefined,
+      })};\n`
+    : "";
   const bootstrap =
     `\n<script id="markup-bootstrap" ${WRAP_MARKER}="true">\n` +
     `  window.__MARKUP_KEY__ = ${JSON.stringify(key)};\n` +
     `  window.__MARKUP_SOURCE_NAME__ = ${JSON.stringify(sourceName)};\n` +
     `  window.__MARKUP_SOURCE_HASH__ = ${JSON.stringify(sourceHash)};\n` +
+    remoteLine +
     `</script>\n` +
     `<script src="/__markup/modern-screenshot.js"></script>\n` +
     `<script src="/__markup/client.js"></script>\n`;

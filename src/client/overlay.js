@@ -31,6 +31,15 @@
     title.textContent = "Markup";
     toolbar.appendChild(title);
 
+    // Shared canvas: show who the server thinks you are.
+    if (Persist.isRemote()) {
+      var who = document.createElement("div");
+      who.className = "markup-toolbar-who";
+      who.textContent = Persist.self();
+      who.setAttribute("title", "Annotating as " + Persist.self());
+      toolbar.appendChild(who);
+    }
+
     var row1 = makeRow();
     row1.appendChild(makeButton({ text: "Text · T", title: "Highlight text (press T)", mode: "span" }));
     row1.appendChild(makeButton({ text: "Pin · P", title: "Pin an element (press P)", mode: "pin" }));
@@ -150,7 +159,10 @@
     updateSidebarBtn();
 
     toolbar.querySelector('[data-action="clear"]').addEventListener("click", function () {
-      if (!confirm("Delete all annotations for this artifact?")) return;
+      var prompt = Persist.isRemote()
+        ? "Delete ALL annotations for this artifact, for every reviewer?"
+        : "Delete all annotations for this artifact?";
+      if (!confirm(prompt)) return;
       document.querySelectorAll(".markup-pin, .markup-rect").forEach(function (n) {
         n.remove();
       });
@@ -263,9 +275,34 @@
     });
   }
 
+  // In remote (multiplayer) mode, identity + the shared annotation set must
+  // land before the overlay renders; then a poll keeps other players' notes
+  // flowing in. An open popover defers the re-render to the next tick so a
+  // note being written is never clobbered.
+  function start() {
+    var sourceKey = window.__MARKUP_KEY__ || "unknown";
+    Persist.init(sourceKey, function () {
+      boot();
+      Persist.startPolling(
+        sourceKey,
+        function () {
+          Modes.refresh();
+          if (typeof window.__MARKUP_UPDATE_COUNT__ === "function") {
+            window.__MARKUP_UPDATE_COUNT__();
+          }
+        },
+        {
+          isPaused: function () {
+            return Popover.isVisible();
+          },
+        },
+      );
+    });
+  }
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
+    document.addEventListener("DOMContentLoaded", start);
   } else {
-    boot();
+    start();
   }
 })();
