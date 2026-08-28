@@ -2,7 +2,13 @@
 // computed from (annotations fetched from the API, persisted state) so the
 // whole sync policy is unit-testable without Slack or a server.
 
-const { replyKey, isBridgeMessage, stripCliSuffix, unescapeSlackText } = require("./format");
+const {
+  replyKey,
+  isBridgeMessage,
+  stripCliSuffix,
+  unescapeSlackText,
+  isTerminal,
+} = require("./format");
 
 // Slack ts values ("1787881105.402179") carry 16 significant digits; float64
 // rounds the last one, so cursor comparisons work on the integer parts.
@@ -16,11 +22,12 @@ function tsLte(a, b) {
 // What has to go Slack-ward this cycle.
 //
 // - An annotation with no mapping yet gets one top-level post (whatever its
-//   state — late is better than invisible).
+//   status; late is better than invisible).
 // - A canvas-originated reply (via !== "slack") not yet mirrored gets posted
 //   into the annotation's thread. Slack-originated replies came FROM the
 //   channel; echoing them back would loop.
-// - resolvedAll flips when there is at least one annotation and none is open.
+// - allAccepted flips when there is at least one annotation and every one has
+//   reached the terminal status (`accepted`; legacy `resolved` tolerated).
 function planActions(annotations, state) {
   const newTopLevel = [];
   const repliesToMirror = [];
@@ -40,10 +47,9 @@ function planActions(annotations, state) {
     }
   }
 
-  const resolvedAll =
-    annotations.length > 0 && annotations.every((a) => a.state === "resolved");
+  const allAccepted = annotations.length > 0 && annotations.every(isTerminal);
 
-  return { newTopLevel, repliesToMirror, resolvedAll };
+  return { newTopLevel, repliesToMirror, allAccepted };
 }
 
 // Which thread messages are new human replies to ingest canvas-ward.

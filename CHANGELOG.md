@@ -108,7 +108,7 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
   `markup bridge <url>` mirrors annotations into the channel as one thread per
   note and carries thread replies back to the annotations API (`via: "slack"`),
   with restart-safe on-disk state, ETag polling, and summary + auto-archive
-  when every annotation resolves. Uses the `ld slack` CLI; runs laptop-bound,
+  when every annotation is accepted. Uses the `ld slack` CLI; runs laptop-bound,
   no Slack app. Includes an in-memory stub of the multiplayer annotations API
   contract (`test/stub-api.js`) runnable standalone for local testing.
 

@@ -107,7 +107,7 @@ function startStub({ port = 0, seedFile } = {}) {
         createdAt: existing ? existing.createdAt : now,
         updatedAt: now,
         replies: existing ? existing.replies : [],
-        state: clientFields.state || (existing ? existing.state : "open"),
+        status: clientFields.status || (existing ? existing.status : "open"),
       };
       s.annotations.set(annoId, merged);
       s.etagN += 1;

@@ -45,9 +45,35 @@ function annoLabel(anno) {
   return "highlight";
 }
 
+// Contract ruling 2026-08-27: the wire shape is a nested `anchor` fingerprint
+// and a `status` field (open | pending | accepted, accepted = terminal). The
+// flat fields are tolerated as fallback for older payloads.
+function annoStatus(anno) {
+  return anno.status || anno.state || "open";
+}
+
+function isTerminalStatus(status) {
+  return status === "accepted" || status === "resolved";
+}
+
+function isTerminal(anno) {
+  return isTerminalStatus(annoStatus(anno));
+}
+
+function anchorTextOf(anno) {
+  return (anno.anchor && anno.anchor.anchorText) || anno.anchorText || null;
+}
+
+function anchorCssPath(anno) {
+  return (anno.anchor && anno.anchor.cssPath) || anno.cssPath || null;
+}
+
 function contextLine(anno) {
-  if (anno.anchorText) return `> ${truncate(anno.anchorText, 180)}`;
-  if (anno.cssPath) return `> \`${truncate(anno.cssPath, 180)}\``;
+  const text = anchorTextOf(anno);
+  if (text) return `> ${truncate(text, 180)}`;
+  const cssPath = anchorCssPath(anno);
+  if (cssPath) return `> \`${truncate(cssPath, 180)}\``;
+  if (anno.anchor && anno.anchor.tagName) return `> \`${anno.anchor.tagName}\``;
   return null;
 }
 
@@ -58,7 +84,7 @@ function truncate(text, max) {
 
 function topLevelText(anno, docUrl) {
   const lines = [
-    `:memo: *${annoLabel(anno)}* · ${anno.author || "unknown"} · ${anno.state || "open"}`,
+    `:memo: *${annoLabel(anno)}* · ${anno.author || "unknown"} · ${annoStatus(anno)}`,
   ];
   const ctx = contextLine(anno);
   if (ctx) lines.push(ctx);
@@ -89,7 +115,7 @@ function shareCardText({ title, docUrl, sharedBy }) {
 function summaryText(annotations) {
   const total = annotations.length;
   return [
-    `:white_check_mark: All ${total} annotation${total === 1 ? "" : "s"} resolved. Archiving this channel; the annotated page stays live.`,
+    `:white_check_mark: All ${total} annotation${total === 1 ? "" : "s"} accepted. Archiving this channel; the annotated page stays live.`,
     `[md:summary]`,
   ].join("\n");
 }
@@ -101,6 +127,11 @@ module.exports = {
   unescapeSlackText,
   replyKey,
   annoLabel,
+  annoStatus,
+  isTerminalStatus,
+  isTerminal,
+  anchorTextOf,
+  anchorCssPath,
   topLevelText,
   mirroredReplyText,
   shareCardText,

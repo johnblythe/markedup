@@ -45,7 +45,7 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
 
   if (res.status === 200) {
     annotations = res.annotations;
-    const { newTopLevel, repliesToMirror, resolvedAll } = planActions(annotations, state);
+    const { newTopLevel, repliesToMirror, allAccepted } = planActions(annotations, state);
 
     for (const anno of newTopLevel) {
       try {
@@ -54,7 +54,7 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
           ts: sent.ts,
           threadCursor: sent.ts,
           mirroredReplyKeys: {},
-          state: anno.state || "open",
+          status: format.annoStatus(anno),
         };
         stateStore.save(stateDir, state);
         posted += 1;
@@ -84,19 +84,19 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
       }
     }
 
-    // Snapshot per-anno state so thread polling can skip resolved ones on 304
-    // cycles, and only trust the ETag once everything above landed.
+    // Snapshot per-anno status so thread polling can skip accepted ones on
+    // 304 cycles, and only trust the ETag once everything above landed.
     for (const anno of annotations) {
-      if (state.annos[anno.id]) state.annos[anno.id].state = anno.state || "open";
+      if (state.annos[anno.id]) state.annos[anno.id].status = format.annoStatus(anno);
     }
     if (slackWardOk) state.etag = res.etag;
-    state.resolvedAll = resolvedAll;
+    state.allAccepted = allAccepted;
     stateStore.save(stateDir, state);
   }
 
   // --- slack → canvas -------------------------------------------------------
   for (const [annoId, mapped] of Object.entries(state.annos)) {
-    if (mapped.state === "resolved") continue;
+    if (format.isTerminalStatus(mapped.status || mapped.state)) continue;
     let messages;
     try {
       messages = await slack.readThread(state.channelId, mapped.ts);
@@ -128,7 +128,7 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
   }
 
   // --- lifecycle -------------------------------------------------------------
-  if (state.resolvedAll && archiveOnResolve && !state.archived) {
+  if (state.allAccepted && archiveOnResolve && !state.archived) {
     try {
       if (!state.summaryTs) {
         const sent = await slack.send(
@@ -141,7 +141,7 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
       await slack.archive(state.channelId);
       state.archived = true;
       stateStore.save(stateDir, state);
-      log(`all resolved: summary posted, #${state.channelName} archived`);
+      log(`all accepted: summary posted, #${state.channelName} archived`);
     } catch (err) {
       log(`ERROR archiving: ${err.message}`);
     }

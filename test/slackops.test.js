@@ -79,17 +79,18 @@ function fakeApi(initial = []) {
   return api;
 }
 
+// Ruled wire shape (contract, 2026-08-27): nested anchor fingerprint + status.
 function anno(id, extra = {}) {
   return {
     id,
     mode: "pin",
     pinNum: 1,
-    cssPath: "body > table > tr",
+    anchor: { cssPath: "body > table > tr", tagName: "tr" },
     note: `note for ${id}`,
     author: "eng@launchdarkly.com",
     createdAt: "2026-08-27T00:00:00Z",
     updatedAt: "2026-08-27T00:00:00Z",
-    state: "open",
+    status: "open",
     replies: [],
     ...extra,
   };
@@ -121,7 +122,10 @@ test("first cycle posts one top-level per annotation and persists mapping", asyn
   const stateDir = tmpDir();
   const state = freshState(stateDir);
   const slack = fakeSlack();
-  const api = fakeApi([anno("anno-a"), anno("anno-b", { mode: "text", anchorText: "W10 dips" })]);
+  const api = fakeApi([
+    anno("anno-a"),
+    anno("anno-b", { mode: "text", anchor: { cssPath: "body > p", anchorText: "W10 dips" } }),
+  ]);
 
   const result = await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
 
@@ -129,6 +133,7 @@ test("first cycle posts one top-level per annotation and persists mapping", asyn
   assert.equal(slack.sends.length, 2);
   assert.ok(slack.sends.every((s) => s.threadTs === null));
   assert.ok(slack.sends[0].text.includes("[md:anno-a]"));
+  assert.ok(slack.sends[1].text.includes("> W10 dips"), "nested anchorText renders as quote");
 
   const reloaded = stateStore.load(stateDir, state.channelName);
   assert.ok(reloaded.annos["anno-a"].ts);
@@ -227,7 +232,7 @@ test("people map attributes slack replies to an email", async () => {
   assert.equal(api.posted[0].asUser, "eng@launchdarkly.com");
 });
 
-test("all resolved posts summary and archives exactly once", async () => {
+test("all accepted posts summary and archives exactly once", async () => {
   const stateDir = tmpDir();
   const state = freshState(stateDir);
   const slack = fakeSlack();
@@ -236,8 +241,8 @@ test("all resolved posts summary and archives exactly once", async () => {
   await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
   assert.equal(state.archived, false);
 
-  api.annos.get("anno-a").state = "resolved";
-  api.annos.get("anno-b").state = "resolved";
+  api.annos.get("anno-a").status = "accepted";
+  api.annos.get("anno-b").status = "accepted";
   api.bump();
 
   const result = await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, ...quiet });
@@ -255,7 +260,7 @@ test("archiveOnResolve false leaves the channel open", async () => {
   const stateDir = tmpDir();
   const state = freshState(stateDir);
   const slack = fakeSlack();
-  const api = fakeApi([anno("anno-a", { state: "resolved" })]);
+  const api = fakeApi([anno("anno-a", { status: "accepted" })]);
 
   await runCycle({ state, stateDir, slack, api, archiveOnResolve: false, ...quiet });
   assert.equal(slack.archived, false);
@@ -264,6 +269,30 @@ test("archiveOnResolve false leaves the channel open", async () => {
 
 // ---------------------------------------------------------------------------
 // plan / format / parse units
+
+test("flat legacy fields tolerated: anchorText/cssPath/state fallbacks", () => {
+  const legacy = {
+    id: "anno-old",
+    mode: "text",
+    cssPath: "body > p",
+    anchorText: "legacy quote",
+    note: "n",
+    author: "a@b.c",
+    state: "resolved",
+    replies: [],
+  };
+  assert.ok(format.topLevelText(legacy, "http://x").includes("> legacy quote"));
+  assert.ok(format.topLevelText(legacy, "http://x").includes("· resolved"));
+  assert.equal(format.isTerminal(legacy), true);
+  const { allAccepted } = planActions([legacy], { annos: { "anno-old": { ts: "1", mirroredReplyKeys: {} } } });
+  assert.equal(allAccepted, true);
+});
+
+test("status vocabulary: pending is not terminal, accepted is", () => {
+  assert.equal(format.isTerminal(anno("a", { status: "pending" })), false);
+  assert.equal(format.isTerminal(anno("a", { status: "accepted" })), true);
+  assert.equal(format.annoStatus({ id: "x" }), "open");
+});
 
 test("planActions: slack-origin replies are never mirrored back", () => {
   const state = { annos: { "anno-a": { ts: "1", mirroredReplyKeys: {}, threadCursor: "1" } } };
@@ -420,7 +449,7 @@ test("stub API: author stamping, etag/304, replies, 404", async () => {
     });
     const anno1 = await put.json();
     assert.equal(anno1.author, "eng@launchdarkly.com", "server stamps author, ignores client");
-    assert.equal(anno1.state, "open");
+    assert.equal(anno1.status, "open");
 
     const get1 = await fetch(`${url}/api/eng/audit/annotations`);
     const body1 = await get1.json();

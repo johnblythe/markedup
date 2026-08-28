@@ -35,7 +35,7 @@ markup bridge https://<host>/eng/board-audit/
 - Replies typed in that Slack thread → appear on the annotation in the page,
   attributed via the invite list (`--to` emails), tagged `via slack`.
 - Replies made on the page → appear in the Slack thread.
-- When every annotation is resolved the bridge posts a summary, archives the
+- When every annotation is accepted the bridge posts a summary, archives the
   channel, and exits. `--no-archive` leaves the channel open.
 - `--once` runs a single sync cycle and exits (useful for cron or checks).
 - Runs in the foreground like `markup serve`; stop with Ctrl-C. The running
@@ -50,8 +50,8 @@ markup bridge https://<host>/eng/board-audit/
 3. Reviewers annotate the page; the channel fills with one thread per note.
 4. Anyone answers in Slack or on the page; both sides see the whole
    conversation.
-5. Resolve annotations on the page as they are addressed; when the last one
-   resolves, the channel archives itself and the bridge exits.
+5. Accept annotations on the page as they are addressed; when the last one
+   is accepted, the channel archives itself and the bridge exits.
 
 ## Limits (v1)
 
