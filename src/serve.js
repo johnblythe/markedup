@@ -142,14 +142,22 @@ async function startServer(filePath, opts = {}) {
   const modernScreenshotPath = require.resolve("modern-screenshot/dist/index.js");
   const modernScreenshotSrc = fs.readFileSync(modernScreenshotPath);
 
-  // Local identity: header wins (fetches from the overlay), then ?as= (page
-  // URL, baked into the injected config), then a friendly default.
+  // Persona from the page URL: ?persona= is the primary name (the two-tab
+  // sandbox), ?as= is the older alias. Prefer persona when both are present.
+  function personaFrom(url) {
+    const persona = url.searchParams.get("persona");
+    if (persona && persona.trim()) return persona.trim().slice(0, 200);
+    const as = url.searchParams.get("as");
+    if (as && as.trim()) return as.trim().slice(0, 200);
+    return null;
+  }
+
+  // Local identity: header wins (API calls carry the baked persona), then the
+  // page URL's ?persona=/?as=, then a friendly default.
   function identityFor(req, url) {
     const header = req.headers["x-markup-user"];
     if (typeof header === "string" && header.trim()) return header.trim().slice(0, 200);
-    const q = url.searchParams.get("as");
-    if (q && q.trim()) return q.trim().slice(0, 200);
-    return "local@dev";
+    return personaFrom(url) || "local@dev";
   }
 
   // Annotations API (contract stub). Accepts any {user}/{project} pair and
@@ -296,7 +304,7 @@ async function startServer(filePath, opts = {}) {
           styles: stylesCSS,
           sourceHash,
           remote: multiplayer
-            ? { user: "local", project: projectSlug, identity: url.searchParams.get("as") || undefined }
+            ? { user: "local", project: projectSlug, identity: personaFrom(url) || undefined }
             : undefined,
         });
         return sendBuffer(res, 200, "text/html; charset=utf-8", Buffer.from(wrapped, "utf-8"));
@@ -342,7 +350,7 @@ async function startServer(filePath, opts = {}) {
           styles: stylesCSS,
           sourceHash,
           remote: multiplayer
-            ? { user: "local", project: projectSlug, identity: url.searchParams.get("as") || undefined }
+            ? { user: "local", project: projectSlug, identity: personaFrom(url) || undefined }
             : undefined,
         });
         return sendBuffer(res, 200, "text/html; charset=utf-8", Buffer.from(wrapped, "utf-8"));

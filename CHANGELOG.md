@@ -9,6 +9,11 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Added
 
+- Two-persona local sandbox: `markup serve <file> --multiplayer` prints two
+  ready-to-open URLs (`?persona=jb`, `?persona=jb2`) so one person can review
+  from two browser tabs as two identities. `?persona=` is the identity param
+  (older `?as=` still works; persona wins when both are given). Stub-only —
+  the Worker still ignores client-supplied identity for JWT callers.
 - Inline reply composer: every note in the review drawer takes threaded
   replies right on the doc (shared canvas and local multiplayer). Replies
   show the author and relative time; Cmd/Ctrl+Enter sends, Esc closes the
@@ -37,6 +42,10 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Fixed
 
+- Per-viewer "seen" tracking is now scoped by identity, not just the doc, so
+  two personas sharing one browser's localStorage keep independent "N new"
+  counts — one persona opening the drawer no longer marks notes seen for the
+  other.
 - Text-span annotations no longer detach spuriously on a shared canvas.
   loadAnnotations now hands out deep copies, so an in-place re-anchor or
   status change on one annotation can't corrupt another through a shared

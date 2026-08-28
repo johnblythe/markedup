@@ -291,6 +291,30 @@ test(
 );
 
 test(
+  "identity: ?persona= is honored and preferred over ?as=",
+  withServer({}, async ({ base }) => {
+    const persona = await api(base, "GET", "/api/me?persona=jb2");
+    assert.strictEqual(persona.json.email, "jb2");
+
+    const as = await api(base, "GET", "/api/me?as=jb");
+    assert.strictEqual(as.json.email, "jb");
+
+    // Both present: persona wins.
+    const both = await api(base, "GET", "/api/me?as=jb&persona=jb2");
+    assert.strictEqual(both.json.email, "jb2");
+  }),
+);
+
+test(
+  "multiplayer wrap: ?persona= bakes into the injected remote identity",
+  withServer({ multiplayer: true }, async ({ base }) => {
+    const page = await fetch(`${base}/?persona=jb2`);
+    const html = await page.text();
+    assert.ok(html.includes('"identity":"jb2"'));
+  }),
+);
+
+test(
   "multiplayer wrap: remote config injected only with --multiplayer, identity from ?as=",
   withServer({ multiplayer: true }, async ({ base }) => {
     const page = await fetch(`${base}/?as=eng@ld.com`);

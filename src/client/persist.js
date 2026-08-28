@@ -344,8 +344,14 @@ var Persist = (function () {
   // store degrades to "nothing remembered" (all others' notes read as new)
   // without throwing.
 
+  // Scoped by the viewing identity, not just the doc: two personas in one
+  // browser (the local two-tab sandbox) share an origin and localStorage, so
+  // a doc-only key would let one persona's "mark seen" clear the other's
+  // "N new". remote.identity is the per-tab persona (?persona=/?as=); on the
+  // real Worker it's absent, so this falls back to the JWT-verified email.
   function seenKey() {
-    return "markup:seen:" + remote.user + "/" + remote.project;
+    var who = remote.identity || selfEmail || "anon";
+    return "markup:seen:" + remote.user + "/" + remote.project + ":" + who;
   }
 
   function loadSeen() {

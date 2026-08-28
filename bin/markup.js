@@ -109,6 +109,14 @@ program
         multiplayer: opts.multiplayer === true,
       });
       console.log(`markup: serving ${path.basename(resolved)} at ${url}`);
+      if (opts.multiplayer) {
+        // Two personas in one browser: open each URL in its own tab to review
+        // as two people. Each tab tracks its own identity, notes, and "N new".
+        const base = url.replace(/\/$/, "");
+        console.log(`markup: open two tabs to review as two people:`);
+        console.log(`markup:   you:       ${base}/?persona=jb`);
+        console.log(`markup:   teammate:  ${base}/?persona=jb2`);
+      }
       console.log(`markup: press Ctrl+C to stop`);
     } catch (err) {
       console.error(`markup: ${err.message}`);

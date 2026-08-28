@@ -24,6 +24,9 @@ function memoryStore(blocked) {
       if (blocked) throw new Error("storage blocked");
       data[k] = String(v);
     },
+    dump() {
+      return data;
+    },
   };
 }
 
@@ -163,6 +166,35 @@ test("new-since-last-visit counts others' unseen notes and clears on markSeen", 
 
   Persist.markSeen();
   assert.strictEqual(Persist.newCount(), 0);
+});
+
+test("two personas in one browser keep independent seen-sets and newCount", async () => {
+  // Same origin => same localStorage. The seen key must be scoped by identity
+  // so one persona opening the drawer can't clear the other's "N new".
+  const store = memoryStore(false);
+  const annotations = [
+    { id: "anno-jb", author: "jb@ld.com", mode: "pin", note: "from jb" },
+    { id: "anno-jb2", author: "jb2@ld.com", mode: "pin", note: "from jb2" },
+  ];
+
+  const jb = loadPersist({ remote: { base: "", user: "u", project: "p" }, annotations, me: "jb@ld.com", store });
+  const jb2 = loadPersist({ remote: { base: "", user: "u", project: "p" }, annotations, me: "jb2@ld.com", store });
+  await new Promise((r) => jb.Persist.init("key", r));
+  await new Promise((r) => jb2.Persist.init("key", r));
+
+  // Each sees only the OTHER persona's note as new.
+  assert.strictEqual(jb.Persist.newCount(), 1);
+  assert.strictEqual(jb2.Persist.newCount(), 1);
+
+  // jb opens the drawer and marks seen — must NOT touch jb2's count.
+  jb.Persist.markSeen();
+  assert.strictEqual(jb.Persist.newCount(), 0, "jb cleared its own");
+  assert.strictEqual(jb2.Persist.newCount(), 1, "jb2 still has its unseen note");
+
+  // The two seen-sets are stored under distinct keys.
+  const keys = Object.keys(store.dump());
+  assert.ok(keys.some((k) => k.endsWith(":jb@ld.com")));
+  assert.ok(!keys.some((k) => k === "markup:seen:u/p"), "no identity-less key");
 });
 
 test("a blocked localStorage degrades gracefully (no throw, all others read as new)", async () => {
