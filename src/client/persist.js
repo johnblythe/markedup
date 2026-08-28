@@ -185,6 +185,26 @@ var Persist = (function () {
       });
   }
 
+  // POST a canvas reply onto an annotation's thread. The server stamps the
+  // author and owns `via`; the updated annotation comes back and is adopted
+  // into the cache so the thread renders without waiting for the next poll.
+  function postReply(id, text) {
+    if (!remote) return Promise.reject(new Error("replies need a shared canvas"));
+    return fetch(apiBase() + "/annotations/" + encodeURIComponent(id) + "/replies", {
+      method: "POST",
+      headers: apiHeaders(true),
+      body: JSON.stringify({ text: text, via: "canvas" }),
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error("reply failed (" + res.status + ")");
+        return res.json();
+      })
+      .then(function (saved) {
+        adoptRecord(saved);
+        return saved;
+      });
+  }
+
   function remoteDelete(id) {
     return fetch(apiBase() + "/annotations/" + encodeURIComponent(id), {
       method: "DELETE",
@@ -253,6 +273,41 @@ var Persist = (function () {
     });
   }
 
+  // ---- presence (remote mode, best-effort) --------------------------------------
+  // Each poll tick also announces "I'm looking at this doc" and reads back who
+  // else is. Purely informational: any failure is silent and nothing else
+  // depends on it.
+
+  var presenceViewers = [];
+
+  function pingPresence(onPresence) {
+    if (!remote) return Promise.resolve();
+    return fetch(apiBase() + "/presence", { method: "POST", headers: apiHeaders(false) })
+      .then(function (res) {
+        if (!res.ok) throw new Error("presence " + res.status);
+        return res.json();
+      })
+      .then(function (body) {
+        presenceViewers = Array.isArray(body.viewers) ? body.viewers : [];
+        if (onPresence) onPresence(presence());
+      })
+      .catch(function () {
+        /* presence is decoration; degrade silently */
+      });
+  }
+
+  // Other viewers (never self), newest first.
+  function presence() {
+    var out = [];
+    presenceViewers.forEach(function (v) {
+      if (v && v.email && v.email !== selfEmail) out.push({ email: v.email, at: v.at });
+    });
+    out.sort(function (a, b) {
+      return String(b.at || "").localeCompare(String(a.at || ""));
+    });
+    return out;
+  }
+
   // Remote mode only: poll for other players' changes. onChange fires only
   // when the shared set actually changed (etag moved). opts.isPaused defers
   // the whole fetch — pausing BEFORE the etag advances, so a change that
@@ -260,6 +315,7 @@ var Persist = (function () {
   function startPolling(sourceKey, onChange, opts) {
     if (!remote || pollTimer) return;
     opts = opts || {};
+    pingPresence(opts.onPresence);
     pollTimer = setInterval(function () {
       if (opts.isPaused && opts.isPaused()) return;
       fetchAll(false)
@@ -269,6 +325,7 @@ var Persist = (function () {
         .catch(function () {
           /* transient poll failures are silent; next tick retries */
         });
+      pingPresence(opts.onPresence);
     }, opts.intervalMs || 10000);
   }
 
@@ -315,16 +372,22 @@ var Persist = (function () {
     }
   }
 
+  // Map of other-authored annotation ids this viewer hasn't marked seen.
+  // The sidebar snapshots it when it opens, so ordering stays stable while
+  // markSeen clears the badge underneath.
+  function newIds() {
+    if (!remote) return {};
+    var seen = loadSeen();
+    var map = {};
+    cache.forEach(function (a) {
+      if (a.author && a.author !== selfEmail && !seen[a.id]) map[a.id] = true;
+    });
+    return map;
+  }
+
   // How many annotations from OTHER authors this viewer hasn't marked seen.
   function newCount() {
-    if (!remote) return 0;
-    var seen = loadSeen();
-    var n = 0;
-    for (var i = 0; i < cache.length; i++) {
-      var a = cache[i];
-      if (a.author && a.author !== selfEmail && !seen[a.id]) n++;
-    }
-    return n;
+    return Object.keys(newIds()).length;
   }
 
   // Mark every currently-loaded annotation seen (call when the viewer opens
@@ -441,6 +504,37 @@ var Persist = (function () {
     }
   }
 
+  // Review-pass ordering for the sidebar: notes you haven't seen from other
+  // reviewers first, then the rest of theirs, then your own — newest first
+  // within each group. `sessionNewIds` is the sidebar's snapshot of newIds()
+  // taken when it opened, so the order holds still while you read.
+  function reviewOrder(list, sessionNewIds) {
+    var newMap = sessionNewIds || {};
+    function rank(a) {
+      if (a.author && a.author !== selfEmail) return newMap[a.id] ? 0 : 1;
+      return 2;
+    }
+    return list.slice().sort(function (a, b) {
+      var r = rank(a) - rank(b);
+      if (r !== 0) return r;
+      return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+    });
+  }
+
+  // Human display label for an annotation's lifecycle. DISPLAY ONLY — the
+  // stored status values (open/pending/accepted) are the wire contract and
+  // never change here.
+  function displayStatus(anno) {
+    var status = anno.status || "open";
+    if (status === "accepted") return "Resolved";
+    if (status === "pending") {
+      if (anno.carryReason === "anchor-lost") return "Moved — re-attach";
+      if (anno.carryReason === "source-changed") return "From earlier version";
+      return "Needs another look";
+    }
+    return "Open";
+  }
+
   function nextPinNumber(sourceKey) {
     return nextNumber(loadAnnotations(sourceKey), "pin", "pinNum");
   }
@@ -487,6 +581,11 @@ var Persist = (function () {
     isRemote: isRemote,
     self: self,
     newCount: newCount,
+    newIds: newIds,
     markSeen: markSeen,
+    postReply: postReply,
+    presence: presence,
+    reviewOrder: reviewOrder,
+    displayStatus: displayStatus,
   };
 })();

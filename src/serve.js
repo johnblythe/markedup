@@ -134,6 +134,8 @@ async function startServer(filePath, opts = {}) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "") || "artifact";
   const annoStore = createAnnotationStore(sourcePath);
+  // Presence heartbeats, identity -> last-seen ISO. In-memory on purpose.
+  const presenceViewers = new Map();
 
   const clientBundle = buildClientBundle();
   const stylesCSS = getStylesCSS();
@@ -160,10 +162,26 @@ async function startServer(filePath, opts = {}) {
     }
 
     const m = pathname.match(
-      /^\/api\/([^/]+)\/([^/]+)\/(annotations|shots)(?:\/([^/]+))?(?:\/(replies))?$/,
+      /^\/api\/([^/]+)\/([^/]+)\/(annotations|shots|presence)(?:\/([^/]+))?(?:\/(replies))?$/,
     );
     if (!m) return null; // not an API path — fall through to static serving
     const [, user, project, section, item, repliesSeg] = m;
+
+    // Presence heartbeat (in-memory; the stub restarts fresh, which is fine
+    // for something that only says "who's looking right now").
+    if (section === "presence" && !item) {
+      if (req.method === "POST") presenceViewers.set(me, new Date().toISOString());
+      if (req.method === "POST" || req.method === "GET") {
+        const now = Date.now();
+        const viewers = [];
+        for (const [email, at] of presenceViewers) {
+          if (now - Date.parse(at) > 24 * 60 * 60 * 1000) presenceViewers.delete(email);
+          else viewers.push({ email, at });
+        }
+        return sendJSON(res, 200, { viewers });
+      }
+      return sendJSON(res, 404, { error: "not found" });
+    }
 
     if (section === "annotations") {
       if (req.method === "GET" && !item) {

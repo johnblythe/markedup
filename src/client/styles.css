@@ -794,3 +794,155 @@ mark.markup-span.markup-authored-other {
   color: var(--markup-text);
   line-height: 1.5;
 }
+
+/* --- Reply threads + composer ------------------------------------------ */
+
+.markup-sidebar-thread {
+  margin-top: 6px;
+}
+
+.markup-sidebar-reply {
+  padding: 4px 6px;
+  margin: 0 0 4px;
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
+.markup-sidebar-reply-author {
+  font-size: 10px;
+  font-weight: 600;
+  color: #7048b6;
+}
+
+.markup-sidebar-reply-when {
+  font-size: 9.5px;
+  color: var(--markup-muted);
+  margin-left: 6px;
+}
+
+.markup-sidebar-reply-text {
+  font-size: 11px;
+  color: var(--markup-text);
+  line-height: 1.45;
+  margin-top: 1px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.markup-sidebar-reply-btn {
+  font-size: 10px;
+  padding: 2px 8px;
+  background: #f5f5f5;
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+  color: var(--markup-muted);
+  cursor: pointer;
+}
+
+.markup-sidebar-reply-btn:hover {
+  color: var(--markup-text);
+  border-color: var(--markup-accent-light);
+}
+
+.markup-sidebar-compose textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  margin-top: 4px;
+  padding: 6px;
+  font-family: inherit;
+  font-size: 11px;
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+  resize: vertical;
+}
+
+.markup-sidebar-compose-buttons {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.markup-sidebar-compose-buttons button {
+  font-size: 10.5px;
+  padding: 3px 10px;
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+  background: #f5f5f5;
+  cursor: pointer;
+}
+
+.markup-sidebar-compose-send {
+  background: var(--markup-accent) !important;
+  border-color: var(--markup-accent) !important;
+  color: #fff;
+}
+
+/* --- Guided review walk -------------------------------------------------- */
+
+.markup-sidebar-entry-new {
+  border-left: 3px solid var(--markup-accent-light);
+}
+
+.markup-sidebar-entry-focus {
+  outline: 2px solid var(--markup-accent);
+  outline-offset: 1px;
+}
+
+#markup-toolbar .markup-badge-new {
+  cursor: pointer;
+}
+
+/* --- Export CTA + menu --------------------------------------------------- */
+
+#markup-toolbar button.markup-btn-primary {
+  flex: 1;
+  background: var(--markup-accent);
+  border-color: var(--markup-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+#markup-toolbar button.markup-btn-more {
+  flex: 0 0 auto;
+  width: 26px;
+}
+
+#markup-toolbar .markup-export-menu {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  margin-top: -2px;
+  background: var(--markup-bg);
+  border: 1px solid var(--markup-border);
+  border-radius: 6px;
+  box-shadow: var(--markup-shadow);
+}
+
+#markup-toolbar .markup-export-menu.markup-export-menu-open {
+  display: flex;
+}
+
+#markup-toolbar .markup-export-menu button {
+  text-align: left;
+  font-size: 11px;
+  padding: 4px 8px;
+  background: #f5f5f5;
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* --- Presence ------------------------------------------------------------ */
+
+#markup-toolbar .markup-badge-presence {
+  font-size: 10px;
+  color: var(--markup-muted);
+  margin-top: 3px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

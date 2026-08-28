@@ -30,7 +30,7 @@ var Popover = (function () {
     var acceptBtn = document.createElement("button");
     acceptBtn.className = "markup-popover-accept";
     acceptBtn.style.display = "none";
-    acceptBtn.textContent = "Accept";
+    acceptBtn.textContent = "Resolve";
     btnRow.appendChild(acceptBtn);
     el._acceptBtn = acceptBtn;
 

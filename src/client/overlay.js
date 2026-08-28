@@ -59,8 +59,48 @@
     meta.textContent = (remote.user || "") + " / " + (remote.project || "");
     badge.appendChild(meta);
 
+    // Who else is looking at this doc; filled by the presence poll.
+    var presenceEl = document.createElement("div");
+    presenceEl.className = "markup-badge-presence";
+    presenceEl.setAttribute("data-badge-presence", "");
+    presenceEl.style.display = "none";
+    badge.appendChild(presenceEl);
+
     badge.appendChild(buildBadgePanel(remote));
     return badge;
+  }
+
+  function presenceLabel(viewer) {
+    var name = String(viewer.email || "?").split("@")[0];
+    name = name.charAt(0).toUpperCase() + name.slice(1);
+    var t = Date.parse(viewer.at);
+    if (!isFinite(t)) return name;
+    var s = (Date.now() - t) / 1000;
+    if (s < 30) return name + " · viewing";
+    if (s < 3600) return name + " · " + Math.max(1, Math.round(s / 60)) + "m ago";
+    if (s < 86400) return name + " · " + Math.round(s / 3600) + "h ago";
+    return name + " · " + Math.round(s / 86400) + "d ago";
+  }
+
+  function renderPresence(viewers) {
+    var el = document.querySelector("[data-badge-presence]");
+    if (!el) return;
+    if (!viewers || viewers.length === 0) {
+      el.style.display = "none";
+      return;
+    }
+    var shown = viewers.slice(0, 2).map(presenceLabel);
+    if (viewers.length > 2) shown.push("+" + (viewers.length - 2) + " more");
+    el.textContent = shown.join("  ·  ");
+    el.setAttribute(
+      "title",
+      viewers
+        .map(function (v) {
+          return v.email;
+        })
+        .join(", "),
+    );
+    el.style.display = "";
   }
 
   function buildBadgePanel(remote) {
@@ -86,7 +126,9 @@
 
     var hand = document.createElement("p");
     hand.appendChild(
-      document.createTextNode("To hand this review to an agent: press Clip to copy it as markdown, or run "),
+      document.createTextNode(
+        "To hand this review to an agent: press “Copy for your agent”, or run ",
+      ),
     );
     var code = document.createElement("code");
     var base = "";
@@ -152,24 +194,53 @@
     );
     toolbar.appendChild(row1b);
 
+    // One primary export: everything in this review, as markdown, on the
+    // clipboard — ready to paste at an agent. The rarer paths live in a
+    // small menu behind "⋯".
     var row2 = makeRow();
+    var copyBtn = makeButton({
+      text: "Copy for your agent · C",
+      title: "Copy every note in this review as markdown (press C), then paste it to your agent",
+      action: "export-clip",
+      className: "markup-btn-primary",
+    });
+    row2.appendChild(copyBtn);
     row2.appendChild(
       makeButton({
-        text: "Clip · C",
-        title: "Copy markdown to clipboard (press C)",
-        action: "export-clip",
-      }),
-    );
-    row2.appendChild(
-      makeButton({
-        text: "Disk · D",
-        title: Persist.isRemote()
-          ? "Download this review as markdown (press D). For a bundle with separate PNGs, run: markup pull <url>"
-          : "Write feedback bundle next to source + copy saved path (press D)",
-        action: "export-disk",
+        text: "⋯",
+        title: "More export options",
+        action: "export-more",
+        className: "markup-btn-more",
       }),
     );
     toolbar.appendChild(row2);
+
+    var moreMenu = document.createElement("div");
+    moreMenu.className = "markup-export-menu";
+    moreMenu.setAttribute("data-export-menu", "");
+    var diskItem = document.createElement("button");
+    diskItem.setAttribute("data-action", "export-disk");
+    diskItem.textContent = Persist.isRemote()
+      ? "Download .md · D"
+      : "Save bundle to disk · D";
+    diskItem.setAttribute(
+      "title",
+      Persist.isRemote()
+        ? "Download this review as one markdown file (screenshots inlined)"
+        : "Write the feedback bundle next to the source file",
+    );
+    moreMenu.appendChild(diskItem);
+    if (Persist.isRemote()) {
+      var pullItem = document.createElement("button");
+      pullItem.setAttribute("data-action", "copy-pull");
+      pullItem.textContent = "Copy `markup pull` command";
+      pullItem.setAttribute(
+        "title",
+        "Copies a terminal command that writes the full bundle with separate PNG files",
+      );
+      moreMenu.appendChild(pullItem);
+    }
+    toolbar.appendChild(moreMenu);
 
     var row3 = makeRow();
     row3.appendChild(
@@ -311,16 +382,63 @@
 
     window.__MARKUP_UPDATE_COUNT__ = updateCount;
 
+    // Export menu: "⋯" toggles it; picking an item (or clicking anywhere
+    // else) closes it.
+    var moreBtn = toolbar.querySelector('[data-action="export-more"]');
+    var exportMenu = toolbar.querySelector("[data-export-menu]");
+    if (moreBtn && exportMenu) {
+      moreBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        exportMenu.classList.toggle("markup-export-menu-open");
+      });
+      document.addEventListener("click", function () {
+        exportMenu.classList.remove("markup-export-menu-open");
+      });
+      var pullBtn = toolbar.querySelector('[data-action="copy-pull"]');
+      if (pullBtn) {
+        pullBtn.addEventListener("click", function () {
+          var cmd = "markup pull " + window.location.origin + window.location.pathname;
+          navigator.clipboard.writeText(cmd).then(
+            function () {
+              Toast.show("Command copied — run it in a terminal to get the full bundle", 3500);
+            },
+            function () {
+              Toast.show(cmd, 6000);
+            },
+          );
+        });
+      }
+    }
+
+    // The badge's "N new" pill starts a guided pass: open the drawer and jump
+    // to the first unseen note; each further click advances to the next.
+    function reviewOpened() {
+      if (Persist.isRemote() && Sidebar.isOpen()) {
+        Persist.markSeen();
+        updateCount();
+      }
+    }
+    if (badgeNew) {
+      badgeNew.addEventListener("click", function (e) {
+        e.stopPropagation();
+        Sidebar.open();
+        Sidebar.focusNext();
+        reviewOpened();
+      });
+    }
+
     // Escape closes the review drawer, but only when nothing more specific
-    // owns Escape: an open popover cancels first, then an active re-attach.
-    // Capture phase so this check runs before their bubble-phase handlers
-    // could flip the state it reads.
+    // owns Escape: an open popover cancels first, then an active re-attach,
+    // then a reply composer (which closes itself). Capture phase so this
+    // check runs before their bubble-phase handlers could flip the state it
+    // reads.
     document.addEventListener(
       "keydown",
       function (e) {
         if (e.key !== "Escape") return;
         if (Popover.isVisible()) return;
         if (Modes.isReattaching && Modes.isReattaching()) return;
+        if (Sidebar.hasActiveComposer && Sidebar.hasActiveComposer()) return;
         if (Sidebar.isOpen()) {
           e.preventDefault();
           Sidebar.close();
@@ -328,6 +446,18 @@
       },
       true,
     );
+
+    // j/k walks the review, next/previous note, wherever you are on the page.
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "j" && e.key !== "k") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+      if (Popover.isVisible()) return;
+      e.preventDefault();
+      if (e.key === "j") Sidebar.focusNext();
+      else Sidebar.focusPrev();
+      reviewOpened();
+    });
 
     Modes.init(sourceKey);
     Modes.hydrate();
@@ -444,6 +574,7 @@
           isPaused: function () {
             return Popover.isVisible();
           },
+          onPresence: renderPresence,
         },
       );
     });

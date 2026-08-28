@@ -9,6 +9,25 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Added
 
+- Inline reply composer: every note in the review drawer takes threaded
+  replies right on the doc (shared canvas and local multiplayer). Replies
+  show the author and relative time; Cmd/Ctrl+Enter sends, Esc closes the
+  composer; new replies from others arrive on the regular sync. Slack-bridged
+  replies land in the same thread.
+- Guided review walk: the badge's "N new" pill is clickable and jumps to the
+  next unseen note; j/k step through every note (drawer entry highlighted,
+  page scrolled to the inline mark); the drawer orders unseen-then-others-
+  then-yours so a top-to-bottom pass covers the whole review.
+- One export CTA: a primary "Copy for your agent" button (whole review as
+  markdown, on the clipboard) with the .md download and a copyable
+  `markup pull <url>` command tucked behind "⋯".
+- Presence: the badge quietly shows who else has the doc open ("Corbin ·
+  viewing") or how recently they looked ("Corbin · 3m ago"), fed by the
+  existing poll; disappears entirely if the endpoint is unavailable.
+- Human status labels in the drawer and popover (display only; stored values
+  unchanged): "Open", "Needs another look", "Resolved", and "Moved —
+  re-attach" for a note whose anchor moved.
+
 - Shared-canvas badge in the overlay chrome (remote mode only): names the
   doc, carries a live "N new" count of other reviewers' notes arrived since
   you last opened the review drawer, and expands a help panel explaining the

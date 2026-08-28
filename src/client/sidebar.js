@@ -15,6 +15,27 @@ var Sidebar = (function () {
   var headerCountEl = null;
   var state = { open: [], pending: [], accepted: [] };
   var handlers = {};
+  // Snapshot of unseen-other ids, taken when the drawer opens, so the review
+  // order and NEW markers hold still while the badge count clears underneath.
+  var sessionNewIds = {};
+  // Flat, render-ordered list of annotations for the j/k + pill walk.
+  var walkList = [];
+  var walkIndex = -1;
+  var activeComposer = null;
+
+  function relTime(iso) {
+    var t = Date.parse(iso);
+    if (!isFinite(t)) return "";
+    var s = Math.max(0, (Date.now() - t) / 1000);
+    if (s < 45) return "just now";
+    if (s < 3600) return Math.round(s / 60) + "m ago";
+    if (s < 86400) return Math.round(s / 3600) + "h ago";
+    return new Date(t).toLocaleDateString();
+  }
+
+  function shortName(email) {
+    return String(email || "?").split("@")[0];
+  }
 
   function ensureBuilt() {
     if (panelEl) return panelEl;
@@ -71,13 +92,13 @@ var Sidebar = (function () {
     return span;
   }
 
-  function statusBadge(status, carryReason) {
+  function statusBadge(anno, status) {
     var span = document.createElement("span");
+    // Class keeps the raw lifecycle value; the visible text is the human label.
     span.className = "markup-sidebar-status markup-sidebar-status-" + status;
-    var label = status.toUpperCase();
-    if (status === "pending" && carryReason === "source-changed") label = "FROM V-1";
-    else if (status === "pending" && carryReason === "anchor-lost") label = "DETACHED";
-    span.textContent = label;
+    span.textContent = Persist.displayStatus
+      ? Persist.displayStatus(anno)
+      : status.toUpperCase();
     return span;
   }
 
@@ -89,15 +110,142 @@ var Sidebar = (function () {
     return b;
   }
 
+  // Threaded replies under an annotation, plus (on a shared canvas) a small
+  // composer so the conversation stays on the doc instead of scattering.
+  function buildThread(anno) {
+    var wrap = document.createElement("div");
+    wrap.className = "markup-sidebar-thread";
+
+    if (anno.replies && anno.replies.length) {
+      anno.replies.forEach(function (r) {
+        var line = document.createElement("div");
+        line.className = "markup-sidebar-reply";
+
+        var who = document.createElement("span");
+        who.className = "markup-sidebar-reply-author";
+        who.textContent = shortName(r.author);
+        who.setAttribute("title", r.author || "");
+        line.appendChild(who);
+
+        var when = document.createElement("span");
+        when.className = "markup-sidebar-reply-when";
+        when.textContent = relTime(r.at);
+        line.appendChild(when);
+
+        var text = document.createElement("div");
+        text.className = "markup-sidebar-reply-text";
+        text.textContent = r.text || "";
+        line.appendChild(text);
+
+        wrap.appendChild(line);
+      });
+    }
+
+    if (Persist.isRemote && Persist.isRemote()) {
+      var replyBtn = document.createElement("button");
+      replyBtn.className = "markup-sidebar-reply-btn";
+      replyBtn.textContent = "Reply";
+      replyBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        openComposer(wrap, replyBtn, anno);
+      });
+      wrap.appendChild(replyBtn);
+    }
+
+    return wrap;
+  }
+
+  function closeComposer() {
+    if (!activeComposer) return;
+    var c = activeComposer;
+    activeComposer = null;
+    if (c.box.parentNode) c.box.parentNode.removeChild(c.box);
+    c.btn.style.display = "";
+  }
+
+  function openComposer(threadEl, replyBtn, anno) {
+    closeComposer();
+
+    var box = document.createElement("div");
+    box.className = "markup-sidebar-compose";
+
+    var ta = document.createElement("textarea");
+    ta.setAttribute("placeholder", "Reply to this note…");
+    box.appendChild(ta);
+
+    var row = document.createElement("div");
+    row.className = "markup-sidebar-compose-buttons";
+
+    var cancel = document.createElement("button");
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", function (e) {
+      e.stopPropagation();
+      closeComposer();
+    });
+    row.appendChild(cancel);
+
+    var send = document.createElement("button");
+    send.className = "markup-sidebar-compose-send";
+    send.textContent = "Send";
+    row.appendChild(send);
+    box.appendChild(row);
+
+    function doSend() {
+      var text = ta.value.trim();
+      if (!text) return;
+      send.disabled = true;
+      send.textContent = "Sending…";
+      Persist.postReply(anno.id, text).then(
+        function () {
+          closeComposer();
+          if (handlers.onThreadChange) handlers.onThreadChange();
+        },
+        function (err) {
+          send.disabled = false;
+          send.textContent = "Send";
+          if (typeof Toast !== "undefined") {
+            Toast.show("Reply failed: " + (err && err.message ? err.message : "network error"), 3500);
+          }
+        },
+      );
+    }
+    send.addEventListener("click", function (e) {
+      e.stopPropagation();
+      doSend();
+    });
+    ta.addEventListener("keydown", function (e) {
+      // Cmd/Ctrl+Enter sends; Esc closes just the composer.
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        e.stopPropagation();
+        doSend();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeComposer();
+      }
+    });
+
+    replyBtn.style.display = "none";
+    threadEl.appendChild(box);
+    activeComposer = { box: box, btn: replyBtn, annoId: anno.id };
+    ta.focus();
+  }
+
+  function hasActiveComposer() {
+    return !!activeComposer;
+  }
+
   function buildEntry(anno, status) {
     var entry = document.createElement("div");
     entry.className = "markup-sidebar-entry markup-sidebar-entry-" + status;
     entry.setAttribute("data-anno-id", anno.id);
+    if (sessionNewIds[anno.id]) entry.classList.add("markup-sidebar-entry-new");
 
     var top = document.createElement("div");
     top.className = "markup-sidebar-entry-top";
     top.appendChild(modeBadge(anno.mode));
-    top.appendChild(statusBadge(status, anno.carryReason));
+    top.appendChild(statusBadge(anno, status));
     if (anno.mode === "pin" && anno.pinNum) {
       var n = document.createElement("span");
       n.className = "markup-sidebar-pin-num";
@@ -120,35 +268,21 @@ var Sidebar = (function () {
     top.appendChild(when);
     entry.appendChild(top);
 
-    // Shared canvas: say whose note this is, and surface any thread on it.
+    // Shared canvas: say whose note this is.
     if (anno.author) {
       var byline = document.createElement("div");
       byline.className = "markup-sidebar-author";
-      var name = String(anno.author).split("@")[0];
-      byline.textContent =
-        name +
-        (anno.replies && anno.replies.length
-          ? " · " + anno.replies.length + " repl" + (anno.replies.length === 1 ? "y" : "ies")
-          : "");
+      byline.textContent = shortName(anno.author);
       byline.setAttribute("title", anno.author);
       entry.appendChild(byline);
-    }
-    if (anno.replies && anno.replies.length) {
-      var thread = document.createElement("div");
-      thread.className = "markup-sidebar-thread";
-      anno.replies.forEach(function (r) {
-        var line = document.createElement("div");
-        line.className = "markup-sidebar-reply";
-        line.textContent = String(r.author || "?").split("@")[0] + ": " + (r.text || "");
-        thread.appendChild(line);
-      });
-      entry.appendChild(thread);
     }
 
     var note = document.createElement("div");
     note.className = "markup-sidebar-note";
     note.textContent = anno.note || "(no note)";
     entry.appendChild(note);
+
+    entry.appendChild(buildThread(anno));
 
     var ctx = document.createElement("div");
     ctx.className = "markup-sidebar-context";
@@ -193,7 +327,7 @@ var Sidebar = (function () {
         }),
       );
       actions.appendChild(
-        makeBtn("Accept", "markup-sidebar-btn-primary", function () {
+        makeBtn("Resolve", "markup-sidebar-btn-primary", function () {
           if (handlers.onAccept) handlers.onAccept(anno);
         }),
       );
@@ -210,7 +344,7 @@ var Sidebar = (function () {
         }),
       );
       actions.appendChild(
-        makeBtn("Accept", "markup-sidebar-btn-primary", function () {
+        makeBtn("Resolve", "markup-sidebar-btn-primary", function () {
           if (handlers.onAccept) handlers.onAccept(anno);
         }),
       );
@@ -280,10 +414,10 @@ var Sidebar = (function () {
       if (status === "pending" || status === "open") {
         bulk.appendChild(
           makeBtn(
-            "Accept all (" + items.length + ")",
+            "Resolve all (" + items.length + ")",
             "markup-sidebar-btn-primary",
             function () {
-              if (!confirm("Accept all " + items.length + " " + status + " annotations?")) return;
+              if (!confirm("Resolve all " + items.length + " notes in this section?")) return;
               items.slice().forEach(function (a) {
                 if (handlers.onAccept) handlers.onAccept(a);
               });
@@ -294,7 +428,7 @@ var Sidebar = (function () {
       if (status === "accepted") {
         bulk.appendChild(
           makeBtn("Re-open all (" + items.length + ")", "", function () {
-            if (!confirm("Re-open all " + items.length + " accepted annotations?")) return;
+            if (!confirm("Re-open all " + items.length + " resolved notes?")) return;
             items.slice().forEach(function (a) {
               if (handlers.onReopen) handlers.onReopen(a);
             });
@@ -330,14 +464,15 @@ var Sidebar = (function () {
       empty.className = "markup-sidebar-empty";
       empty.textContent =
         status === "pending"
-          ? "No pending annotations."
+          ? "Nothing needs another look."
           : status === "open"
-          ? "No open annotations."
-          : "Nothing accepted yet.";
+          ? "No open notes. Select text, or press P and click, to leave one."
+          : "Nothing resolved yet.";
       body.appendChild(empty);
     } else {
       items.forEach(function (a) {
         body.appendChild(buildEntry(a, status));
+        walkList.push({ id: a.id, anno: a, status: status });
       });
     }
 
@@ -354,15 +489,61 @@ var Sidebar = (function () {
     return wrap;
   }
 
+  // Review-pass order inside each section: on a shared canvas, notes you
+  // haven't seen from other reviewers come first, then theirs, then yours —
+  // so walking top-to-bottom covers the whole review without hunting.
+  function ordered(items) {
+    if (Persist.isRemote && Persist.isRemote() && Persist.reviewOrder) {
+      return Persist.reviewOrder(items, sessionNewIds);
+    }
+    return items;
+  }
+
   function render() {
     ensureBuilt();
+    closeComposer();
     listEl.textContent = "";
-    listEl.appendChild(section("Pending", state.pending, "pending", false));
-    listEl.appendChild(section("Open", state.open, "open", false));
-    listEl.appendChild(section("Accepted", state.accepted, "accepted", true));
+    walkList = [];
+    listEl.appendChild(section("Needs another look", state.pending, "pending", false));
+    listEl.appendChild(section("Open", ordered(state.open), "open", false));
+    listEl.appendChild(section("Resolved", state.accepted, "accepted", true));
 
     // Top count badge = pending count (the one that actually needs action).
     headerCountEl.textContent = state.pending.length > 0 ? String(state.pending.length) : "";
+  }
+
+  // ---- guided walk (j/k keys + the badge's "N new" pill) --------------------
+
+  function focusAt(index) {
+    if (!walkList.length) return;
+    walkIndex = ((index % walkList.length) + walkList.length) % walkList.length;
+    var target = walkList[walkIndex];
+
+    open();
+    var entries = listEl.querySelectorAll(".markup-sidebar-entry");
+    for (var i = 0; i < entries.length; i++) {
+      entries[i].classList.remove("markup-sidebar-entry-focus");
+    }
+    var entry = listEl.querySelector('.markup-sidebar-entry[data-anno-id="' + target.id + '"]');
+    if (entry) {
+      // Un-collapse the section holding it so the walk never lands on nothing.
+      var sectionEl = entry.closest(".markup-sidebar-section");
+      if (sectionEl) sectionEl.classList.remove("markup-sidebar-section-collapsed");
+      entry.classList.add("markup-sidebar-entry-focus");
+      entry.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    // Bring the page to the note itself when it's rendered inline.
+    if (target.status === "open" && handlers.onScrollToInline) {
+      handlers.onScrollToInline(target.anno);
+    }
+  }
+
+  function focusNext() {
+    focusAt(walkIndex + 1);
+  }
+
+  function focusPrev() {
+    focusAt(walkIndex - 1);
   }
 
   function setBanner(opts) {
@@ -408,10 +589,18 @@ var Sidebar = (function () {
 
   function open() {
     ensureBuilt();
-    panelEl.classList.add("markup-sidebar-open");
+    if (!panelEl.classList.contains("markup-sidebar-open")) {
+      // Freeze the "what's new to me" snapshot for this reading session so
+      // the review order and NEW markers hold still while the badge clears.
+      sessionNewIds = Persist.newIds ? Persist.newIds() : {};
+      walkIndex = -1;
+      panelEl.classList.add("markup-sidebar-open");
+      render();
+    }
   }
   function close() {
     if (!panelEl) return;
+    closeComposer();
     panelEl.classList.remove("markup-sidebar-open");
   }
   function toggle() {
@@ -442,5 +631,8 @@ var Sidebar = (function () {
     isOpen: isOpen,
     detachedCount: detachedCount,
     pendingCount: pendingCount,
+    focusNext: focusNext,
+    focusPrev: focusPrev,
+    hasActiveComposer: hasActiveComposer,
   };
 })();

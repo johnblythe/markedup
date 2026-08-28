@@ -203,6 +203,38 @@ test(
 );
 
 test(
+  "presence API: POST records the viewer, GET reads without recording",
+  withServer({}, async ({ base }) => {
+    const p1 = await api(base, "POST", "/api/local/report/presence", {
+      headers: { "X-Markup-User": "john@ld.com" },
+    });
+    assert.strictEqual(p1.status, 200);
+    assert.deepStrictEqual(
+      p1.json.viewers.map((v) => v.email),
+      ["john@ld.com"],
+    );
+
+    const p2 = await api(base, "POST", "/api/local/report/presence", {
+      headers: { "X-Markup-User": "eng@ld.com" },
+    });
+    assert.deepStrictEqual(p2.json.viewers.map((v) => v.email).sort(), [
+      "eng@ld.com",
+      "john@ld.com",
+    ]);
+
+    // GET as a third identity reads the list without joining it.
+    const g = await api(base, "GET", "/api/local/report/presence", {
+      headers: { "X-Markup-User": "lurker@ld.com" },
+    });
+    assert.deepStrictEqual(g.json.viewers.map((v) => v.email).sort(), [
+      "eng@ld.com",
+      "john@ld.com",
+    ]);
+    assert.ok(g.json.viewers.every((v) => Number.isFinite(Date.parse(v.at))));
+  }),
+);
+
+test(
   "annotations API: a corrupt file is refused loudly, never clobbered",
   withServer({}, async ({ base, dir }) => {
     await api(base, "PUT", "/api/local/report/annotations/anno-e1", { body: PIN });

@@ -133,6 +133,11 @@ var Modes = (function () {
         onReopen: reopenAnnotation,
         onRemove: removeAnnotation,
         onScrollToInline: scrollToInline,
+        // A posted reply lands in the cache; rebuild so the thread shows now.
+        onThreadChange: function () {
+          refresh();
+          updateCount();
+        },
         sourceChanged: sourceChanged,
       },
     );

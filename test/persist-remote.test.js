@@ -51,6 +51,20 @@ function loadPersist({ remote, annotations, me, store }) {
           json: () => Promise.resolve({ etag: "e1", annotations }),
         });
       }
+      // Replies route: behave like the server — append and return the annotation.
+      const replyMatch = url.match(/\/annotations\/([^/]+)\/replies$/);
+      if (replyMatch && method === "POST") {
+        const target = annotations.find((a) => a.id === replyMatch[1]);
+        const body = JSON.parse(opts.body);
+        const updated = {
+          ...target,
+          replies: [
+            ...((target && target.replies) || []),
+            { author: me, text: body.text, at: new Date().toISOString(), via: "canvas" },
+          ],
+        };
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(updated) });
+      }
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
     },
   };
@@ -197,6 +211,84 @@ function loadPersist2Local() {
   vm.runInContext(src, sandbox);
   return { Persist: sandbox.Persist };
 }
+
+test("postReply POSTs via:canvas and adopts the updated thread into the cache", async () => {
+  const { Persist, fetchCalls } = loadPersist({
+    remote: { base: "", user: "u", project: "p" },
+    annotations: [{ id: "anno-t1", author: "them@ld.com", mode: "pin", note: "theirs" }],
+    me: "me@ld.com",
+  });
+  await new Promise((resolve) => Persist.init("key", resolve));
+
+  const saved = await Persist.postReply("anno-t1", "on it");
+  const replyCall = fetchCalls.find((c) => c.url.endsWith("/annotations/anno-t1/replies"));
+  assert.ok(replyCall, "reply POST was sent");
+  assert.strictEqual(replyCall.method, "POST");
+  assert.strictEqual(saved.replies.length, 1);
+  assert.strictEqual(saved.replies[0].text, "on it");
+
+  // The thread is in the cache immediately — the sidebar renders it without
+  // waiting for the next poll.
+  const fromCache = Persist.loadAnnotations("key").find((a) => a.id === "anno-t1");
+  assert.strictEqual(fromCache.replies.length, 1);
+  assert.strictEqual(fromCache.replies[0].author, "me@ld.com");
+});
+
+test("reviewOrder: unseen others first, then others, then mine, newest first", async () => {
+  const { Persist } = loadPersist({
+    remote: { base: "", user: "u", project: "p" },
+    annotations: [
+      { id: "anno-mine-old", author: "me@ld.com", createdAt: "2026-08-01T00:00:00Z" },
+      { id: "anno-their-seen", author: "them@ld.com", createdAt: "2026-08-02T00:00:00Z" },
+      { id: "anno-their-new2", author: "them@ld.com", createdAt: "2026-08-03T00:00:00Z" },
+      { id: "anno-their-new1", author: "other@ld.com", createdAt: "2026-08-04T00:00:00Z" },
+      { id: "anno-mine-new", author: "me@ld.com", createdAt: "2026-08-05T00:00:00Z" },
+    ],
+    me: "me@ld.com",
+  });
+  await new Promise((resolve) => Persist.init("key", resolve));
+
+  const sessionNew = { "anno-their-new1": true, "anno-their-new2": true };
+  const ordered = Persist.reviewOrder(Persist.loadAnnotations("key"), sessionNew);
+  assert.deepStrictEqual(
+    Array.from(ordered, (a) => a.id),
+    ["anno-their-new1", "anno-their-new2", "anno-their-seen", "anno-mine-new", "anno-mine-old"],
+  );
+});
+
+test("displayStatus maps wire values to human labels without touching them", async () => {
+  const { Persist } = loadPersist({
+    remote: { base: "", user: "u", project: "p" },
+    annotations: [],
+    me: "me@ld.com",
+  });
+  await new Promise((resolve) => Persist.init("key", resolve));
+
+  assert.strictEqual(Persist.displayStatus({ status: "open" }), "Open");
+  assert.strictEqual(Persist.displayStatus({}), "Open");
+  assert.strictEqual(Persist.displayStatus({ status: "accepted" }), "Resolved");
+  assert.strictEqual(Persist.displayStatus({ status: "pending" }), "Needs another look");
+  assert.strictEqual(
+    Persist.displayStatus({ status: "pending", carryReason: "anchor-lost" }),
+    "Moved — re-attach",
+  );
+  assert.strictEqual(
+    Persist.displayStatus({ status: "pending", carryReason: "source-changed" }),
+    "From earlier version",
+  );
+});
+
+test("presence degrades silently when the endpoint is unavailable", async () => {
+  const { Persist } = loadPersist({
+    remote: { base: "", user: "u", project: "p" },
+    annotations: [],
+    me: "me@ld.com",
+  });
+  await new Promise((resolve) => Persist.init("key", resolve));
+  // The stub fetch answers /presence with a generic {ok:true} body lacking
+  // viewers — presence() must simply stay empty, never throw.
+  assert.deepStrictEqual(Array.from(Persist.presence()), []);
+});
 
 test("local mode deleteAnnotation is unchanged (no author scoping)", async () => {
   const stored = {};
