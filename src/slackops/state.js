@@ -14,7 +14,7 @@ function stateFile(stateDir, channelName) {
 }
 
 function emptyState({ docUrl, apiBase, user, project, channelName }) {
-  return {
+  return normalize({
     version: 1,
     docUrl,
     apiBase,
@@ -32,7 +32,22 @@ function emptyState({ docUrl, apiBase, user, project, channelName }) {
     // annoId → { ts, mirroredReplyKeys: { key: slackTs }, threadCursor,
     //            status, pendingIngestTs? }
     annos: {},
-  };
+  });
+}
+
+// Fill defaults for fields added after a state file was written, so older
+// files keep working.
+function normalize(state) {
+  if (state.owner === undefined) state.owner = null;
+  if (state.title === undefined) state.title = null;
+  if (!state.nudge) state.nudge = {};
+  const nudge = state.nudge;
+  if (nudge.target === undefined) nudge.target = "channel";
+  if (nudge.intervalMs === undefined) nudge.intervalMs = 600_000;
+  if (nudge.lastNudgeAt === undefined) nudge.lastNudgeAt = null;
+  if (nudge.ownerSlackId === undefined) nudge.ownerSlackId = null;
+  if (!nudge.pending) nudge.pending = {};
+  return state;
 }
 
 function load(stateDir, channelName) {
@@ -40,7 +55,7 @@ function load(stateDir, channelName) {
   if (!fs.existsSync(file)) return null;
   const parsed = JSON.parse(fs.readFileSync(file, "utf-8"));
   if (parsed.version !== 1) throw new Error(`unsupported state version in ${file}`);
-  return parsed;
+  return normalize(parsed);
 }
 
 function save(stateDir, state) {
@@ -53,4 +68,4 @@ function save(stateDir, state) {
   return file;
 }
 
-module.exports = { DEFAULT_DIR, stateFile, emptyState, load, save };
+module.exports = { DEFAULT_DIR, stateFile, emptyState, normalize, load, save };

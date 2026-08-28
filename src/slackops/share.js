@@ -6,7 +6,7 @@ const os = require("node:os");
 const stateStore = require("./state");
 const format = require("./format");
 const defaultSlack = require("./slack-cli");
-const { parseDocUrl, assertTrustedOrigin, authHeaders } = require("./api-client");
+const { parseDocUrl, assertTrustedOrigin, authHeaders, fetchAnnotations } = require("./api-client");
 
 const PREFIX = "markd-";
 const TEST_PREFIX = "markd-test-";
@@ -50,6 +50,25 @@ async function fetchDocTitle(docUrl) {
   }
 }
 
+// A share run right after `markup publish` can race site propagation; a few
+// short retries absorb that without failing the share (the bridge catches up
+// regardless).
+async function probeCanvas(target, delays, log) {
+  const waits = [0, ...delays];
+  for (let i = 0; i < waits.length; i++) {
+    if (waits[i]) await new Promise((resolve) => setTimeout(resolve, waits[i]));
+    try {
+      await fetchAnnotations(target);
+      return true;
+    } catch (err) {
+      if (i === waits.length - 1) {
+        log(`warning: canvas not reachable yet (${err.message}); sharing anyway`);
+      }
+    }
+  }
+  return false;
+}
+
 async function shareDoc({
   docUrl,
   to = [],
@@ -57,12 +76,15 @@ async function shareDoc({
   channelOverride,
   stateDir,
   sharedBy,
+  owner,
+  probeDelays = [2_000, 5_000],
   slack = defaultSlack,
   log = console.log,
 }) {
   const { apiBase, user, project } = parseDocUrl(docUrl);
   // Refuse untrusted origins before anything is persisted or contacted.
   assertTrustedOrigin(apiBase);
+  await probeCanvas({ apiBase, user, project }, probeDelays, log);
   const channelName = channelNameFor({ user, project, test, channelOverride });
 
   let state =
@@ -97,6 +119,24 @@ async function shareDoc({
     log(`channel #${channelName} already bound (${state.channelId})`);
   }
 
+  // Owner (for the activity digest): persisted; Slack id looked up so DM
+  // nudges and mentions work without another lookup later.
+  if (owner) {
+    state.owner = owner;
+    if (!state.nudge.ownerSlackId) {
+      try {
+        const person = await slack.userByEmail(owner);
+        if (person) {
+          state.people[owner] = person;
+          state.nudge.ownerSlackId = person.id;
+        }
+      } catch (err) {
+        log(`warning: lookup failed for owner ${owner}: ${err.message}`);
+      }
+    }
+    stateStore.save(stateDir, state);
+  }
+
   // Invites: look people up first so Slack replies can be attributed to an
   // email later; the invite itself tolerates already-in-channel.
   const emails = to.map((e) => e.trim()).filter(Boolean);
@@ -120,13 +160,18 @@ async function shareDoc({
     stateStore.save(stateDir, state);
   }
 
+  // Title persisted for reuse by the bridge's digest messages.
+  if (!state.title) {
+    state.title = (await fetchDocTitle(docUrl)) || `${user}/${project}`;
+    stateStore.save(stateDir, state);
+  }
+
   // Link card, once.
   if (!state.shareMsgTs) {
-    const title = (await fetchDocTitle(docUrl)) || `${user}/${project}`;
     const sent = await slack.send(
       state.channelId,
       format.shareCardText({
-        title,
+        title: state.title,
         docUrl,
         sharedBy: sharedBy || os.userInfo().username,
       }),

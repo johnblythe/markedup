@@ -29,9 +29,20 @@ function makeLog(quiet) {
   return quiet ? () => {} : (msg) => console.log(`[${ts()}] ${msg}`);
 }
 
+// Record canvas activity by someone other than the doc owner, feeding the
+// debounced owner digest. The bridge's own posts never come through here and
+// slack-via replies are excluded upstream, so echo suppression holds.
+function addPendingNudge(state, author, kind) {
+  if (!state.owner || !author) return;
+  if (String(author).toLowerCase() === String(state.owner).toLowerCase()) return;
+  const entry = state.nudge.pending[author] || { notes: 0, replies: 0 };
+  entry[kind] += 1;
+  state.nudge.pending[author] = entry;
+}
+
 // Runs one sync cycle against injected slack/api drivers. Mutates and
 // persists `state`. Returns { archived, posted, ingested, cycleOk }.
-async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) {
+async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log, now = Date.now }) {
   let posted = 0;
   let ingested = 0;
   let slackWardOk = true;
@@ -85,6 +96,7 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
             mirroredReplyKeys: {},
             status: format.annoStatus(anno),
           };
+          addPendingNudge(state, anno.author, "notes");
           stateStore.save(stateDir, state);
           log(`adopted standing post for ${anno.id} (${standingTs})`);
           continue;
@@ -97,6 +109,7 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
             mirroredReplyKeys: {},
             status: format.annoStatus(anno),
           };
+          addPendingNudge(state, anno.author, "notes");
           stateStore.save(stateDir, state);
           posted += 1;
           log(`posted ${anno.id} (${format.annoLabel(anno)} by ${anno.author}) → thread ${sent.ts}`);
@@ -129,6 +142,7 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
         const standingTs = threadMarkers.get(`r:${annoId}:${key}`);
         if (standingTs) {
           mapped.mirroredReplyKeys[key] = standingTs;
+          addPendingNudge(state, reply.author, "replies");
           stateStore.save(stateDir, state);
           log(`adopted standing mirror on ${annoId} (${standingTs})`);
           continue;
@@ -140,6 +154,7 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
             mapped.ts,
           );
           mapped.mirroredReplyKeys[key] = sent.ts;
+          addPendingNudge(state, reply.author, "replies");
           stateStore.save(stateDir, state);
           posted += 1;
           log(`mirrored canvas reply on ${annoId} → ${sent.ts}`);
@@ -158,6 +173,37 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log }) 
     if (slackWardOk) state.etag = res.etag;
     state.allAccepted = allAccepted;
     stateStore.save(stateDir, state);
+  }
+
+  // --- owner nudge ------------------------------------------------------------
+  // One coalesced digest per debounce window when non-owner canvas activity
+  // accumulated; a failed send keeps the pending counts for the next cycle.
+  const nudge = state.nudge;
+  if (
+    state.owner &&
+    nudge.target !== "off" &&
+    Object.keys(nudge.pending).length &&
+    now() - (nudge.lastNudgeAt || 0) >= nudge.intervalMs
+  ) {
+    const dm = nudge.target === "dm" && nudge.ownerSlackId;
+    const target = dm ? nudge.ownerSlackId : state.channelId;
+    try {
+      await slack.send(
+        target,
+        format.nudgeText({
+          pending: nudge.pending,
+          title: state.title || `${state.user}/${state.project}`,
+          docUrl: state.docUrl,
+          ownerSlackId: dm ? null : nudge.ownerSlackId,
+        }),
+      );
+      nudge.pending = {};
+      nudge.lastNudgeAt = now();
+      stateStore.save(stateDir, state);
+      log(`owner nudged (${dm ? "dm" : "channel"})`);
+    } catch (err) {
+      log(`ERROR nudging owner: ${err.message}`);
+    }
   }
 
   // --- slack → canvas -------------------------------------------------------
@@ -257,6 +303,9 @@ async function startBridge({
   archiveOnResolve = true,
   once = false,
   quiet = false,
+  owner,
+  nudgeTo,
+  nudgeIntervalMs,
   slack = defaultSlack,
   api = defaultApi,
 }) {
@@ -277,6 +326,35 @@ async function startBridge({
   // it every start so an old state file can't point the bridge (and the
   // service token) at an untrusted origin.
   assertTrustedOrigin(state.apiBase);
+
+  // Owner-nudge configuration: flags override and persist.
+  if (owner) state.owner = owner;
+  if (nudgeTo) {
+    if (!["channel", "dm", "off"].includes(nudgeTo)) {
+      throw new Error(`--nudge-to must be channel, dm, or off (got ${nudgeTo})`);
+    }
+    state.nudge.target = nudgeTo;
+  }
+  if (Number.isFinite(nudgeIntervalMs) && nudgeIntervalMs > 0) {
+    state.nudge.intervalMs = nudgeIntervalMs;
+  }
+  if (state.nudge.target === "dm" && state.owner && !state.nudge.ownerSlackId) {
+    const known = state.people[state.owner];
+    if (known && known.id) {
+      state.nudge.ownerSlackId = known.id;
+    } else {
+      try {
+        const person = await slack.userByEmail(state.owner);
+        if (person) state.nudge.ownerSlackId = person.id;
+      } catch (_e) {
+        // fall through to the warning below
+      }
+    }
+    if (!state.nudge.ownerSlackId) {
+      log(`warning: no Slack user found for owner ${state.owner}; nudging the channel instead`);
+    }
+  }
+  stateStore.save(stateDir, state);
 
   if (once) {
     return runCycle({ state, stateDir, slack, api, archiveOnResolve, log });

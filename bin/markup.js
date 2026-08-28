@@ -355,6 +355,7 @@ program
   .command("share <url>")
   .description("Share a published Marked Up doc into a private Slack channel")
   .option("--to <emails...>", "invite these people by email")
+  .option("--owner <email>", "doc owner: gets the activity digest when others annotate")
   .option("--test", "use the markd-test- channel prefix (John-only test channels)")
   .option("--channel <name>", "explicit channel name instead of markd-<slug>")
   .option("--state-dir <dir>", "bridge state directory (default ~/.markup/bridge)")
@@ -364,6 +365,7 @@ program
       const result = await shareDoc({
         docUrl: url,
         to: opts.to || [],
+        owner: opts.owner,
         test: opts.test === true,
         channelOverride: opts.channel,
         stateDir: opts.stateDir,
@@ -384,6 +386,9 @@ program
   .option("--interval <seconds>", "poll interval (default 30, min 15)")
   .option("--once", "run a single sync cycle and exit")
   .option("--no-archive", "do not archive the channel when everything is resolved")
+  .option("--owner <email>", "doc owner: gets the activity digest when others annotate")
+  .option("--nudge-to <target>", "digest target: channel (default), dm, or off")
+  .option("--nudge-interval <seconds>", "minimum quiet time between digests (default 600)")
   .option("--state-dir <dir>", "bridge state directory (default ~/.markup/bridge)")
   .action(async (url, opts) => {
     const { startBridge } = require("../src/slackops/bridge");
@@ -404,6 +409,9 @@ program
         intervalMs: opts.interval ? parseInt(opts.interval, 10) * 1000 : undefined,
         archiveOnResolve: opts.archive !== false,
         once: opts.once === true,
+        owner: opts.owner,
+        nudgeTo: opts.nudgeTo,
+        nudgeIntervalMs: opts.nudgeInterval ? parseInt(opts.nudgeInterval, 10) * 1000 : undefined,
       });
       if (opts.once && result) {
         console.log(

@@ -128,6 +128,23 @@ function shareCardText({ title, docUrl, sharedBy }) {
   ].join("\n");
 }
 
+function countPhrase(counts) {
+  const bits = [];
+  if (counts.notes) bits.push(`${counts.notes} new note${counts.notes === 1 ? "" : "s"}`);
+  if (counts.replies) bits.push(`${counts.replies} ${counts.replies === 1 ? "reply" : "replies"}`);
+  return bits.join(" and ");
+}
+
+// Owner digest: one coalesced "come look" per debounce window, never one per
+// note. pending is { author: { notes, replies } }.
+function nudgeText({ pending, title, docUrl, ownerSlackId }) {
+  const parts = Object.entries(pending)
+    .map(([author, counts]) => `${author} left ${countPhrase(counts)}`)
+    .join("; ");
+  const mention = ownerSlackId ? `<@${ownerSlackId}> ` : "";
+  return [`:bell: ${mention}new activity on *${title}*: ${parts}.`, docUrl, `[md:nudge]`].join("\n");
+}
+
 function summaryText(annotations) {
   const total = annotations.length;
   return [
@@ -152,6 +169,7 @@ module.exports = {
   topLevelText,
   mirroredReplyText,
   shareCardText,
+  nudgeText,
   summaryText,
   truncate,
 };

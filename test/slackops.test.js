@@ -298,6 +298,216 @@ test("archiveOnResolve false leaves the channel open", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// owner nudge digest
+
+const OWNER = "john@launchdarkly.com";
+
+function ownedState(stateDir) {
+  const state = freshState(stateDir);
+  state.owner = OWNER;
+  stateStore.save(stateDir, state);
+  return state;
+}
+
+function nudges(slack) {
+  return slack.sends.filter((s) => s.text.includes("[md:nudge]"));
+}
+
+test("a burst of non-owner notes becomes one digest, not per-note spam", async () => {
+  const stateDir = tmpDir();
+  const state = ownedState(stateDir);
+  const slack = fakeSlack();
+  const api = fakeApi([anno("anno-a"), anno("anno-b"), anno("anno-c")]);
+  let clock = 1_000_000;
+  const now = () => clock;
+
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, now, ...quiet });
+  let digests = nudges(slack);
+  assert.equal(digests.length, 1, "one digest for the whole burst");
+  assert.equal(digests[0].channelId, "CTEST");
+  assert.ok(digests[0].text.includes("eng@launchdarkly.com left 3 new notes"));
+  assert.ok(digests[0].text.includes(state.docUrl));
+  assert.deepEqual(state.nudge.pending, {});
+  assert.equal(state.nudge.lastNudgeAt, clock);
+
+  // A canvas reply by a second person, mirrored next cycle, digests too.
+  api.annos.get("anno-c").replies.push({
+    author: "priya@launchdarkly.com",
+    text: "same here",
+    at: "t",
+    via: "canvas",
+  });
+  api.bump();
+  clock += 700_000;
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, now, ...quiet });
+  digests = nudges(slack);
+  assert.equal(digests.length, 2);
+  assert.ok(digests[1].text.includes("priya@launchdarkly.com left 1 reply"));
+});
+
+test("the owner's own activity never nudges", async () => {
+  const stateDir = tmpDir();
+  const state = ownedState(stateDir);
+  const slack = fakeSlack();
+  const api = fakeApi([anno("anno-a", { author: OWNER })]);
+
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, now: () => 1_000_000, ...quiet });
+  assert.equal(nudges(slack).length, 0);
+  assert.deepEqual(state.nudge.pending, {});
+});
+
+test("digests debounce: quiet window holds, then coalesces", async () => {
+  const stateDir = tmpDir();
+  const state = ownedState(stateDir);
+  state.nudge.intervalMs = 600_000;
+  const slack = fakeSlack();
+  const api = fakeApi([anno("anno-a")]);
+  let clock = 1_000_000;
+  const now = () => clock;
+
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, now, ...quiet });
+  assert.equal(nudges(slack).length, 1);
+
+  // More activity inside the quiet window: accumulate, don't post.
+  clock += 1_000;
+  api.annos.set("anno-b", anno("anno-b"));
+  api.annos.set("anno-c", anno("anno-c"));
+  api.bump();
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, now, ...quiet });
+  assert.equal(nudges(slack).length, 1, "still one digest");
+  assert.equal(state.nudge.pending["eng@launchdarkly.com"].notes, 2);
+
+  // Window elapses: one coalesced digest for both.
+  clock += 700_000;
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, now, ...quiet });
+  const digests = nudges(slack);
+  assert.equal(digests.length, 2);
+  assert.ok(digests[1].text.includes("2 new notes"));
+});
+
+test("slack-ingested replies do not feed the digest", async () => {
+  const stateDir = tmpDir();
+  const state = ownedState(stateDir);
+  const slack = fakeSlack();
+  const api = fakeApi([anno("anno-a", { author: OWNER })]);
+
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, now: () => 1_000_000, ...quiet });
+  slack.addHuman(state.annos["anno-a"].ts, "from slack side", "2000.000001");
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, now: () => 2_000_000, ...quiet });
+  assert.equal(api.posted.length, 1, "reply ingested");
+  assert.deepEqual(state.nudge.pending, {}, "no digest pressure from slack replies");
+  assert.equal(nudges(slack).length, 0);
+});
+
+test("a failed digest send keeps pending counts for the next cycle", async () => {
+  const stateDir = tmpDir();
+  const state = ownedState(stateDir);
+  const slack = fakeSlack();
+  const realSend = slack.send;
+  slack.send = async (channelId, text, threadTs) => {
+    if (text.includes("[md:nudge]")) throw new Error("slack down");
+    return realSend(channelId, text, threadTs);
+  };
+  const api = fakeApi([anno("anno-a")]);
+  let clock = 1_000_000;
+
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, now: () => clock, ...quiet });
+  assert.equal(state.nudge.pending["eng@launchdarkly.com"].notes, 1, "pending kept");
+  assert.equal(state.nudge.lastNudgeAt, null);
+
+  slack.send = realSend;
+  clock += 700_000;
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, now: () => clock, ...quiet });
+  assert.equal(nudges(slack).length, 1, "delivered on retry");
+  assert.deepEqual(state.nudge.pending, {});
+});
+
+test("dm target sends the digest to the owner's user id", async () => {
+  const stateDir = tmpDir();
+  const state = ownedState(stateDir);
+  state.nudge.target = "dm";
+  state.nudge.ownerSlackId = "UOWNER";
+  stateStore.save(stateDir, state);
+  const slack = fakeSlack();
+  const api = fakeApi([anno("anno-a")]);
+
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, now: () => 1_000_000, ...quiet });
+  const digests = nudges(slack);
+  assert.equal(digests.length, 1);
+  assert.equal(digests[0].channelId, "UOWNER");
+  assert.ok(!digests[0].text.includes("<@UOWNER>"), "no self-mention inside a DM");
+});
+
+test("nudge target off disables digests", async () => {
+  const stateDir = tmpDir();
+  const state = ownedState(stateDir);
+  state.nudge.target = "off";
+  stateStore.save(stateDir, state);
+  const slack = fakeSlack();
+  const api = fakeApi([anno("anno-a")]);
+
+  await runCycle({ state, stateDir, slack, api, archiveOnResolve: true, now: () => 1_000_000, ...quiet });
+  assert.equal(nudges(slack).length, 0);
+});
+
+test("nudgeText: counts, pluralization, mention, marker", () => {
+  const text = format.nudgeText({
+    pending: {
+      "corbin@x.co": { notes: 3, replies: 0 },
+      "priya@x.co": { notes: 1, replies: 2 },
+    },
+    title: "Board Audit",
+    docUrl: "https://h.dev/e/p/",
+    ownerSlackId: "U1",
+  });
+  assert.ok(text.includes("<@U1>"));
+  assert.ok(text.includes("*Board Audit*"));
+  assert.ok(text.includes("corbin@x.co left 3 new notes"));
+  assert.ok(text.includes("priya@x.co left 1 new note and 2 replies"));
+  assert.ok(text.includes("[md:nudge]"));
+});
+
+test("shareDoc --owner persists owner and slack id", async () => {
+  const stateDir = tmpDir();
+  const slack = fakeSlack();
+  slack.createChannel = async (name) => ({ channelId: "CNEW", name });
+  slack.userByEmail = async (email) => ({ id: "UJOHN", name: email });
+  slack.setTopic = async () => ({ ok: true });
+
+  await shareDoc({
+    docUrl: "http://127.0.0.1:1/eng/audit/",
+    test: true,
+    owner: OWNER,
+    stateDir,
+    probeDelays: [],
+    slack,
+    log: () => {},
+  });
+  const state = stateStore.load(stateDir, "markd-test-eng-audit");
+  assert.equal(state.owner, OWNER);
+  assert.equal(state.nudge.ownerSlackId, "UJOHN");
+});
+
+test("shareDoc survives a not-yet-propagated site (probe retries then warns)", async () => {
+  const stateDir = tmpDir();
+  const slack = fakeSlack();
+  slack.createChannel = async (name) => ({ channelId: "CNEW", name });
+  slack.setTopic = async () => ({ ok: true });
+  const warnings = [];
+
+  const result = await shareDoc({
+    docUrl: "http://127.0.0.1:1/eng/audit/",
+    test: true,
+    stateDir,
+    probeDelays: [10, 20],
+    slack,
+    log: (m) => warnings.push(m),
+  });
+  assert.equal(result.channelName, "markd-test-eng-audit", "share completed anyway");
+  assert.ok(warnings.some((w) => w.includes("not reachable yet")));
+});
+
+// ---------------------------------------------------------------------------
 // adversarial-review fixes
 
 test("assertTrustedOrigin: localhost and LDPUB_URL pass, everything else refuses", () => {
@@ -616,6 +826,7 @@ test("shareDoc reopens an archived channel for a new round", async () => {
     docUrl: "http://127.0.0.1:1/eng/audit/",
     test: true,
     stateDir,
+    probeDelays: [],
     slack,
     log: () => {},
   });
@@ -672,6 +883,7 @@ test("shareDoc creates channel, posts card once, tolerates re-share", async () =
     test: true,
     stateDir,
     sharedBy: "john",
+    probeDelays: [],
     slack,
     log: () => {},
   };

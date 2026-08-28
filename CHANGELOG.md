@@ -111,6 +111,10 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
   when every annotation is accepted. Uses the `ld slack` CLI; runs laptop-bound,
   no Slack app. Includes an in-memory stub of the multiplayer annotations API
   contract (`test/stub-api.js`) runnable standalone for local testing.
+  Owner digest: `--owner <email>` makes the bridge post one coalesced,
+  debounced heads-up when others annotate (channel message by default,
+  `--nudge-to dm` for a DM, `--nudge-to off` to disable), and `markup share`
+  retries briefly when run straight after a fresh publish.
   Hardened after adversarial review: share/bridge refuse any API origin other
   than `LDPUB_URL` (https) or localhost and only ever send the service token
   to the configured origin; sends and reply ingests reconcile against the

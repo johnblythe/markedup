@@ -23,7 +23,9 @@ markup share https://<host>/eng/board-audit/ --to eng@launchdarkly.com
   the people in `--to`, posts a link card, and sets the channel topic to the
   doc URL.
 - Re-running is safe: same channel, no duplicate card, extra `--to` people
-  get invited.
+  get invited. Running right after `markup publish` is fine too: share waits
+  briefly for a just-created site and proceeds either way.
+- `--owner <email>` names the doc owner for the activity digest (below).
 - If a previous round resolved and archived the channel, re-sharing reopens
   it for a new round.
 - `--channel <name>` overrides the derived name. `--test` uses the
@@ -42,6 +44,14 @@ markup bridge https://<host>/eng/board-audit/
   page, attributed via the invite list (`--to` emails), tagged `via slack`.
   The page displays replies; it has no reply box, so the conversation lives
   in Slack.
+- Owner digest: when someone other than the owner leaves notes or replies on
+  the page, the bridge posts one coalesced heads-up ("eng left 3 new notes on
+  Board Audit" with the link) instead of expecting the owner to keep
+  re-opening the page. A burst of notes becomes one digest; at most one
+  digest per quiet window (default 10 minutes, `--nudge-interval <seconds>`).
+  Set the owner with `--owner <email>` (here or on `share`); without it,
+  digests are off. `--nudge-to dm` sends the digest as a DM to the owner
+  instead of a channel message; `--nudge-to off` disables digests.
 - When every annotation is accepted the bridge posts a summary, archives the
   channel, and exits. `--no-archive` leaves the channel open.
 - `--once` runs a single sync cycle and exits (useful for cron or checks).
