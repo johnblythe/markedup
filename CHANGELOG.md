@@ -7,7 +7,35 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+
+- Shared-canvas badge in the overlay chrome (remote mode only): names the
+  doc, carries a live "N new" count of other reviewers' notes arrived since
+  you last opened the review drawer, and expands a help panel explaining the
+  shared workflow and how to hand the review to an agent. Solo mode is
+  unchanged. The "new" count is tracked per viewer in that viewer's own
+  localStorage and degrades gracefully when the store is blocked.
+
 ### Fixed
+
+- Text-span annotations no longer detach spuriously on a shared canvas.
+  loadAnnotations now hands out deep copies, so an in-place re-anchor or
+  status change on one annotation can't corrupt another through a shared
+  object reference; a failed re-render in remote mode keeps the note open and
+  visible instead of persisting status=pending to the shared doc (which had
+  detached a reviewer's comment for everyone); and two spans in the same
+  element re-anchor independently.
+- The review drawer quotes a span's actual selected text, not its parent
+  element's text — two spans in one paragraph no longer show identical,
+  mislabeled quotes.
+- A reviewer's own new or edited annotation appears in the review drawer
+  immediately; the ~10s poll cadence is only for other reviewers' changes.
+- Escape closes the review drawer when it's open (after any popover or active
+  re-attach, which still take Escape first).
+- On a shared canvas the "Disk" export downloads a self-contained markdown
+  file with inlined screenshots instead of calling a /export route the Worker
+  doesn't serve; the tooltip points to `markup pull <url>` for the full
+  bundle with separate PNG files. Local serve keeps its existing behavior.
 
 - Shared-canvas destructive ops are scoped to your own annotations: deleting
   someone else's note is refused (deletion tombstones the id forever), and

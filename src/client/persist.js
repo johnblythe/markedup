@@ -280,10 +280,82 @@ var Persist = (function () {
     return selfEmail;
   }
 
+  // ---- per-viewer "seen" tracking (remote mode) --------------------------------
+  // A viewer-local record of which annotation ids this browser has already
+  // looked at, so the badge can surface "N new" from other authors. Stored in
+  // this viewer's own localStorage (never shared, keyed by doc). A blocked
+  // store degrades to "nothing remembered" (all others' notes read as new)
+  // without throwing.
+
+  function seenKey() {
+    return "markup:seen:" + remote.user + "/" + remote.project;
+  }
+
+  function loadSeen() {
+    try {
+      var raw = localStorage.getItem(seenKey());
+      var arr = raw ? JSON.parse(raw) : [];
+      var map = {};
+      if (Array.isArray(arr)) {
+        arr.forEach(function (id) {
+          map[id] = true;
+        });
+      }
+      return map;
+    } catch (_e) {
+      return {};
+    }
+  }
+
+  function saveSeen(map) {
+    try {
+      localStorage.setItem(seenKey(), JSON.stringify(Object.keys(map)));
+    } catch (_e) {
+      /* blocked store: this viewer just won't remember what it has seen */
+    }
+  }
+
+  // How many annotations from OTHER authors this viewer hasn't marked seen.
+  function newCount() {
+    if (!remote) return 0;
+    var seen = loadSeen();
+    var n = 0;
+    for (var i = 0; i < cache.length; i++) {
+      var a = cache[i];
+      if (a.author && a.author !== selfEmail && !seen[a.id]) n++;
+    }
+    return n;
+  }
+
+  // Mark every currently-loaded annotation seen (call when the viewer opens
+  // the review panel).
+  function markSeen() {
+    if (!remote) return;
+    var seen = loadSeen();
+    cache.forEach(function (a) {
+      seen[a.id] = true;
+    });
+    saveSeen(seen);
+  }
+
   // ---- public surface (original nine functions, driver-routed) -------------------
 
+  // A caller of loadAnnotations gets its own annotation objects to mutate.
+  // Without this, cache.slice() would hand out shared references: an in-place
+  // edit to one annotation's nested anchor/payload (a re-anchor, a status
+  // bump) would silently corrupt the cache copy other views hold, which is
+  // how one span's re-anchor could clobber another's. Writes go back only
+  // through upsertAnnotation/saveAll.
+  function clone(anno) {
+    try {
+      return JSON.parse(JSON.stringify(anno));
+    } catch (_e) {
+      return anno;
+    }
+  }
+
   function loadAnnotations(sourceKey) {
-    if (remote) return cache.slice();
+    if (remote) return cache.map(clone);
     return localLoad(sourceKey);
   }
 
@@ -414,5 +486,7 @@ var Persist = (function () {
     startPolling: startPolling,
     isRemote: isRemote,
     self: self,
+    newCount: newCount,
+    markSeen: markSeen,
   };
 })();

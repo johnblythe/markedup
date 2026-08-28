@@ -105,11 +105,20 @@ var Modes = (function () {
       }
       if (rendered) decorateAuthored(anno);
       if (!rendered) {
-        anno.status = "pending";
-        anno.carryReason = "anchor-lost";
-        Persist.upsertAnnotation(sourceKey, anno);
-        pending.push(anno);
-        changed = true;
+        if (Persist.isRemote()) {
+          // A failed re-anchor here is a per-view rendering miss (DOM timing,
+          // a sibling span splitting the text node), NOT a real source change.
+          // Persisting status=pending would write it to the shared doc and
+          // detach a reviewer's comment for everyone. Keep it open and
+          // visible; the next hydrate retries the highlight.
+          open.push(anno);
+        } else {
+          anno.status = "pending";
+          anno.carryReason = "anchor-lost";
+          Persist.upsertAnnotation(sourceKey, anno);
+          pending.push(anno);
+          changed = true;
+        }
       } else {
         open.push(anno);
       }
@@ -396,6 +405,9 @@ var Modes = (function () {
     pendingMark.className = "markup-span";
     pendingMark.setAttribute("data-anno-id", anno.id);
     Persist.upsertAnnotation(sourceKey, anno);
+    // Author's own write: rebuild the review drawer now, don't wait for the
+    // ~10s poll (that cadence is only for other reviewers' changes).
+    refresh();
     updateCount();
   }
 
@@ -457,9 +469,31 @@ var Modes = (function () {
     return wrapFirstTextMatch(anchorEl, text, anno.id);
   }
 
+  // Text already wrapped by an earlier span this pass must be skipped, so two
+  // spans in the same element don't shadow or split-break each other on
+  // re-hydrate. The walker still visits the fragments an earlier mark left
+  // behind (they sit outside the mark), so a distinct second selection is
+  // still found.
+  function insideSpanMark(node) {
+    var p = node.parentNode;
+    while (p && p !== document.body) {
+      if (p.classList && p.classList.contains("markup-span")) return true;
+      p = p.parentNode;
+    }
+    return false;
+  }
+
+  function spanTextWalker(root) {
+    return document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (n) {
+        return insideSpanMark(n) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      },
+    });
+  }
+
   function wrapFirstTextMatch(root, needle, annoId, className) {
     var markClassName = className || "markup-span";
-    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    var walker = spanTextWalker(root);
     var node;
     while ((node = walker.nextNode())) {
       var idx = node.nodeValue.indexOf(needle);
@@ -485,7 +519,7 @@ var Modes = (function () {
         }
       }
     }
-    walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    walker = spanTextWalker(root);
     var normalizedNeedle = needle.replace(/\s+/g, " ").trim();
     while ((node = walker.nextNode())) {
       var normalized = node.nodeValue.replace(/\s+/g, " ");
@@ -527,6 +561,7 @@ var Modes = (function () {
           onSave: function (note) {
             anno.note = note;
             Persist.upsertAnnotation(sourceKey, anno);
+            refresh();
             updateCount();
           },
           onAccept: function () {
@@ -737,6 +772,7 @@ var Modes = (function () {
       onSave: function (note) {
         anno.note = note;
         Persist.upsertAnnotation(sourceKey, anno);
+        refresh();
         updateCount();
       },
       onCancel: function () {
@@ -761,6 +797,7 @@ var Modes = (function () {
       onSave: function (note) {
         anno.note = note;
         Persist.upsertAnnotation(sourceKey, anno);
+        refresh();
         updateCount();
       },
       onAccept: function () {
@@ -933,6 +970,7 @@ var Modes = (function () {
       onSave: function (note) {
         anno.note = note;
         Persist.upsertAnnotation(sourceKey, anno);
+        refresh();
         updateCount();
       },
       onCancel: function () {
@@ -962,6 +1000,7 @@ var Modes = (function () {
       onSave: function (note) {
         anno.note = note;
         Persist.upsertAnnotation(sourceKey, anno);
+        refresh();
         updateCount();
       },
       onAccept: function () {
@@ -995,6 +1034,10 @@ var Modes = (function () {
     box.style.height = (p.h || 0) + "px";
   }
 
+  function isReattaching() {
+    return !!reattachTarget;
+  }
+
   return {
     init: init,
     setActive: setActive,
@@ -1002,5 +1045,6 @@ var Modes = (function () {
     hydrate: hydrate,
     refresh: refresh,
     isInsideMarkupUI: isInsideMarkupUI,
+    isReattaching: isReattaching,
   };
 })();

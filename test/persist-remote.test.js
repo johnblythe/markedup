@@ -10,11 +10,28 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-function loadPersist({ remote, annotations, me }) {
+// In-memory localStorage that actually persists (for seen-tracking tests).
+// `blocked: true` throws on every access, standing in for a private-mode /
+// disabled store — the driver must degrade without crashing.
+function memoryStore(blocked) {
+  const data = {};
+  return {
+    getItem(k) {
+      if (blocked) throw new Error("storage blocked");
+      return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null;
+    },
+    setItem(k, v) {
+      if (blocked) throw new Error("storage blocked");
+      data[k] = String(v);
+    },
+  };
+}
+
+function loadPersist({ remote, annotations, me, store }) {
   const fetchCalls = [];
   const sandbox = {
     window: { __MARKUP_REMOTE__: remote },
-    localStorage: {
+    localStorage: store || {
       getItem: () => null,
       setItem: () => {},
     },
@@ -74,6 +91,112 @@ test("remote destructive ops are scoped to the caller's own annotations", async 
     ["anno-theirs"],
   );
 });
+
+test("loadAnnotations hands out isolated copies — a caller's in-place mutation can't corrupt the cache", async () => {
+  const { Persist } = loadPersist({
+    remote: { base: "", user: "u", project: "p" },
+    annotations: [
+      { id: "anno-1", author: "me@ld.com", mode: "span", payload: { anchorText: "first selection" }, anchor: { cssPath: "body>p", anchorText: "para" } },
+      { id: "anno-2", author: "them@ld.com", mode: "span", payload: { anchorText: "second selection" }, anchor: { cssPath: "body>p", anchorText: "para" } },
+    ],
+    me: "me@ld.com",
+  });
+  await new Promise((resolve) => Persist.init("key", resolve));
+
+  // Simulate the re-anchor path mutating a returned annotation in place
+  // (reattach writes anno.payload.anchorText, hydrate writes anno.status).
+  const first = Persist.loadAnnotations("key");
+  first[0].payload.anchorText = "CLOBBERED";
+  first[0].status = "pending";
+  first[1].anchor.cssPath = "body>div";
+
+  // A fresh read is unaffected: the two spans keep their distinct, correct
+  // anchor data. Without deep-copy-on-read these mutations would leak through
+  // the shared reference and detach/duplicate the other span.
+  const again = Persist.loadAnnotations("key");
+  assert.strictEqual(again[0].payload.anchorText, "first selection");
+  assert.strictEqual(again[0].status, undefined);
+  assert.strictEqual(again[1].payload.anchorText, "second selection");
+  assert.strictEqual(again[1].anchor.cssPath, "body>p");
+  // And the two annotations never share a nested object.
+  assert.notStrictEqual(again[0].payload, again[1].payload);
+});
+
+test("new-since-last-visit counts others' unseen notes and clears on markSeen", async () => {
+  const store = memoryStore(false);
+  const { Persist } = loadPersist({
+    remote: { base: "", user: "u", project: "p" },
+    annotations: [
+      { id: "anno-mine", author: "me@ld.com", mode: "pin", note: "mine" },
+      { id: "anno-t1", author: "them@ld.com", mode: "pin", note: "theirs 1" },
+    ],
+    me: "me@ld.com",
+    store,
+  });
+  await new Promise((resolve) => Persist.init("key", resolve));
+
+  // First visit: the one other-authored note is new; my own never counts.
+  assert.strictEqual(Persist.newCount(), 1);
+
+  // Opening the review panel marks everything seen.
+  Persist.markSeen();
+  assert.strictEqual(Persist.newCount(), 0);
+
+  // A later arrival from another author is new again; my own addition isn't.
+  Persist.upsertAnnotation("key", { id: "anno-t2", author: "them@ld.com", mode: "pin", note: "theirs 2" });
+  Persist.upsertAnnotation("key", { id: "anno-m2", author: "me@ld.com", mode: "pin", note: "mine 2" });
+  assert.strictEqual(Persist.newCount(), 1);
+
+  Persist.markSeen();
+  assert.strictEqual(Persist.newCount(), 0);
+});
+
+test("a blocked localStorage degrades gracefully (no throw, all others read as new)", async () => {
+  const { Persist } = loadPersist({
+    remote: { base: "", user: "u", project: "p" },
+    annotations: [
+      { id: "anno-mine", author: "me@ld.com", mode: "pin", note: "mine" },
+      { id: "anno-t1", author: "them@ld.com", mode: "pin", note: "theirs" },
+    ],
+    me: "me@ld.com",
+    store: memoryStore(true),
+  });
+  await new Promise((resolve) => Persist.init("key", resolve));
+
+  // Nothing can be remembered, so the other-authored note always reads as new;
+  // markSeen must not throw even though the store rejects writes.
+  assert.strictEqual(Persist.newCount(), 1);
+  assert.doesNotThrow(() => Persist.markSeen());
+  assert.strictEqual(Persist.newCount(), 1);
+});
+
+test("newCount and markSeen are inert in local mode", async () => {
+  const { Persist } = loadPersist2Local();
+  await new Promise((resolve) => Persist.init("key", resolve));
+  assert.strictEqual(Persist.isRemote(), false);
+  assert.strictEqual(Persist.newCount(), 0);
+  assert.doesNotThrow(() => Persist.markSeen());
+});
+
+function loadPersist2Local() {
+  const stored = {};
+  const sandbox = {
+    window: {},
+    localStorage: {
+      getItem: (k) => stored[k] || null,
+      setItem: (k, v) => {
+        stored[k] = v;
+      },
+    },
+    console,
+    setInterval: () => 0,
+    fetch: () => Promise.reject(new Error("no network in local mode")),
+  };
+  const src = fs.readFileSync(path.join(__dirname, "../src/client/persist.js"), "utf-8");
+  vm.createContext(sandbox);
+  vm.runInContext(src, sandbox);
+  return { Persist: sandbox.Persist };
+}
 
 test("local mode deleteAnnotation is unchanged (no author scoping)", async () => {
   const stored = {};

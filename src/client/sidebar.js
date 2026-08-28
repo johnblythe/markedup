@@ -160,10 +160,15 @@ var Sidebar = (function () {
       img.alt = "rect screenshot";
       ctx.appendChild(img);
     } else {
-      var anchorText =
-        (anno.anchor && anno.anchor.anchorText) ||
-        (anno.payload && anno.payload.anchorText) ||
-        "";
+      // For a span, quote the reviewer's actual selection (payload.anchorText);
+      // anchor.anchorText is the whole parent element's text, which is
+      // identical for two spans in the same paragraph and reads as duplicate,
+      // mislabeled context. Pins/rects have no selection, so they fall back to
+      // the element text.
+      var span = anno.mode === "span";
+      var selText = anno.payload && anno.payload.anchorText;
+      var elText = anno.anchor && anno.anchor.anchorText;
+      var anchorText = (span ? selText || elText : elText || selText) || "";
       if (anchorText) {
         var quote = document.createElement("div");
         quote.className = "markup-sidebar-quote";

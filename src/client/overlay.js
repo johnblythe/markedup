@@ -22,6 +22,92 @@
     return r;
   }
 
+  // Shared-canvas badge: names the doc, carries the live "N new" count, and
+  // opens a compact panel explaining the shared workflow to a reviewer.
+  function buildBadge() {
+    var remote = window.__MARKUP_REMOTE__ || {};
+    var badge = document.createElement("div");
+    badge.className = "markup-badge";
+
+    var line = document.createElement("div");
+    line.className = "markup-badge-line";
+
+    var label = document.createElement("span");
+    label.className = "markup-badge-label";
+    label.textContent = "Shared canvas";
+    label.setAttribute("data-action", "badge-toggle");
+    line.appendChild(label);
+
+    var newPill = document.createElement("span");
+    newPill.className = "markup-badge-new";
+    newPill.setAttribute("data-badge-new", "");
+    newPill.style.display = "none";
+    line.appendChild(newPill);
+
+    var help = document.createElement("button");
+    help.className = "markup-badge-help";
+    help.setAttribute("data-action", "badge-toggle");
+    help.setAttribute("title", "How the shared canvas works");
+    help.textContent = "?";
+    line.appendChild(help);
+
+    badge.appendChild(line);
+
+    var meta = document.createElement("div");
+    meta.className = "markup-badge-meta";
+    meta.setAttribute("data-badge-meta", "");
+    meta.textContent = (remote.user || "") + " / " + (remote.project || "");
+    badge.appendChild(meta);
+
+    badge.appendChild(buildBadgePanel(remote));
+    return badge;
+  }
+
+  function buildBadgePanel(remote) {
+    var panel = document.createElement("div");
+    panel.className = "markup-badge-panel";
+
+    var close = document.createElement("button");
+    close.className = "markup-badge-close";
+    close.setAttribute("data-action", "badge-close");
+    close.setAttribute("title", "Close");
+    close.textContent = "×";
+    panel.appendChild(close);
+
+    function p(text) {
+      var el = document.createElement("p");
+      el.textContent = text;
+      panel.appendChild(el);
+    }
+
+    p("Everyone who opens this URL sees the notes here, and you see theirs.");
+    p("Other people's notes appear in violet with their name; yours appear in your color.");
+    p("New notes from others show up on their own every few seconds.");
+
+    var hand = document.createElement("p");
+    hand.appendChild(
+      document.createTextNode("To hand this review to an agent: press Clip to copy it as markdown, or run "),
+    );
+    var code = document.createElement("code");
+    var base = "";
+    try {
+      base = window.location.origin + window.location.pathname;
+    } catch (_e) {
+      base = "<url>";
+    }
+    code.textContent = "markup pull " + base;
+    hand.appendChild(code);
+    hand.appendChild(document.createTextNode(" in a terminal for a bundle with the screenshots."));
+    panel.appendChild(hand);
+
+    var you = document.createElement("div");
+    you.className = "markup-badge-you";
+    you.textContent = "You: " + Persist.self();
+    panel.appendChild(you);
+
+    return panel;
+  }
+
   function buildToolbar() {
     var toolbar = document.createElement("div");
     toolbar.id = "markup-toolbar";
@@ -31,13 +117,10 @@
     title.textContent = "Markup";
     toolbar.appendChild(title);
 
-    // Shared canvas: show who the server thinks you are.
+    // Shared canvas: badge with the doc name, a live "N new" count, and a
+    // help panel. Solo/localStorage mode shows none of this.
     if (Persist.isRemote()) {
-      var who = document.createElement("div");
-      who.className = "markup-toolbar-who";
-      who.textContent = Persist.self();
-      who.setAttribute("title", "Annotating as " + Persist.self());
-      toolbar.appendChild(who);
+      toolbar.appendChild(buildBadge());
     }
 
     var row1 = makeRow();
@@ -80,7 +163,9 @@
     row2.appendChild(
       makeButton({
         text: "Disk · D",
-        title: "Write feedback bundle next to source + copy saved path (press D)",
+        title: Persist.isRemote()
+          ? "Download this review as markdown (press D). For a bundle with separate PNGs, run: markup pull <url>"
+          : "Write feedback bundle next to source + copy saved path (press D)",
         action: "export-disk",
       }),
     );
@@ -119,10 +204,34 @@
 
     var countEl = toolbar.querySelector("[data-count]");
     var modeButtons = toolbar.querySelectorAll("button[data-mode]");
+    var badgeMeta = toolbar.querySelector("[data-badge-meta]");
+    var badgeNew = toolbar.querySelector("[data-badge-new]");
 
     function updateCount() {
       var list = Persist.loadAnnotations(sourceKey);
-      countEl.textContent = list.length + (list.length === 1 ? " annotation" : " annotations");
+      var total = list.length;
+      if (badgeMeta) {
+        // Remote mode: the badge carries the count and the "N new" pill; the
+        // plain count line would just duplicate it.
+        var remote = window.__MARKUP_REMOTE__ || {};
+        badgeMeta.textContent =
+          (remote.user || "") +
+          " / " +
+          (remote.project || "") +
+          " · " +
+          total +
+          (total === 1 ? " note" : " notes");
+        var n = Persist.newCount();
+        if (n > 0) {
+          badgeNew.textContent = n + " new";
+          badgeNew.style.display = "";
+        } else {
+          badgeNew.style.display = "none";
+        }
+        countEl.style.display = "none";
+      } else {
+        countEl.textContent = total + (total === 1 ? " annotation" : " annotations");
+      }
     }
 
     function setActiveMode(mode) {
@@ -149,7 +258,29 @@
     var sidebarBtn = toolbar.querySelector('[data-action="sidebar"]');
     sidebarBtn.addEventListener("click", function () {
       Sidebar.toggle();
+      // Opening the review panel is "looking at" the notes — clear the badge's
+      // "N new" so it only ever flags genuinely-unseen arrivals.
+      if (Persist.isRemote() && Sidebar.isOpen()) {
+        Persist.markSeen();
+        updateCount();
+      }
     });
+
+    // Shared-canvas badge: toggle the help panel; both the label and the "?"
+    // open it, the "×" closes it.
+    var badgePanel = toolbar.querySelector(".markup-badge-panel");
+    if (badgePanel) {
+      toolbar.querySelectorAll('[data-action="badge-toggle"]').forEach(function (el) {
+        el.addEventListener("click", function () {
+          badgePanel.classList.toggle("markup-badge-panel-open");
+        });
+      });
+      toolbar
+        .querySelector('[data-action="badge-close"]')
+        .addEventListener("click", function () {
+          badgePanel.classList.remove("markup-badge-panel-open");
+        });
+    }
     function updateSidebarBtn() {
       var n = Sidebar.pendingCount ? Sidebar.pendingCount() : Sidebar.detachedCount();
       sidebarBtn.textContent = n > 0 ? "Review (" + n + ")" : "Review";
@@ -179,6 +310,24 @@
     });
 
     window.__MARKUP_UPDATE_COUNT__ = updateCount;
+
+    // Escape closes the review drawer, but only when nothing more specific
+    // owns Escape: an open popover cancels first, then an active re-attach.
+    // Capture phase so this check runs before their bubble-phase handlers
+    // could flip the state it reads.
+    document.addEventListener(
+      "keydown",
+      function (e) {
+        if (e.key !== "Escape") return;
+        if (Popover.isVisible()) return;
+        if (Modes.isReattaching && Modes.isReattaching()) return;
+        if (Sidebar.isOpen()) {
+          e.preventDefault();
+          Sidebar.close();
+        }
+      },
+      true,
+    );
 
     Modes.init(sourceKey);
     Modes.hydrate();
