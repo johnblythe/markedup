@@ -202,7 +202,10 @@ program
     } else if (target) {
       const resolved = path.resolve(target);
       toStop = items.filter(
-        (i) => i.sourcePath === resolved || path.basename(i.sourcePath) === target,
+        (i) =>
+          i.sourcePath === resolved ||
+          i.sourcePath === target || // bridges register a doc URL, not a file path
+          path.basename(i.sourcePath) === target,
       );
       if (!toStop.length) {
         console.error(`markup: no instance serving ${target}`);
@@ -343,6 +346,71 @@ program
         );
         process.exit(1);
       }
+      console.error(`markup: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("share <url>")
+  .description("Share a published Marked Up doc into a private Slack channel")
+  .option("--to <emails...>", "invite these people by email")
+  .option("--test", "use the markd-test- channel prefix (John-only test channels)")
+  .option("--channel <name>", "explicit channel name instead of markd-<slug>")
+  .option("--state-dir <dir>", "bridge state directory (default ~/.markup/bridge)")
+  .action(async (url, opts) => {
+    const { shareDoc } = require("../src/slackops/share");
+    try {
+      const result = await shareDoc({
+        docUrl: url,
+        to: opts.to || [],
+        test: opts.test === true,
+        channelOverride: opts.channel,
+        stateDir: opts.stateDir,
+      });
+      console.log(`markup: shared to #${result.channelName} (${result.channelId})`);
+      console.log(`markup: start the bridge with \`markup bridge ${url}${opts.test ? " --test" : ""}\``);
+    } catch (err) {
+      console.error(`markup: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("bridge <url>")
+  .description("Mirror annotations to the doc's Slack channel and thread replies back")
+  .option("--test", "use the markd-test- channel prefix")
+  .option("--channel <name>", "explicit channel name instead of markd-<slug>")
+  .option("--interval <seconds>", "poll interval (default 30, min 15)")
+  .option("--once", "run a single sync cycle and exit")
+  .option("--no-archive", "do not archive the channel when everything is resolved")
+  .option("--state-dir <dir>", "bridge state directory (default ~/.markup/bridge)")
+  .action(async (url, opts) => {
+    const { startBridge } = require("../src/slackops/bridge");
+    const { channelNameFor } = require("../src/slackops/share");
+    const { parseDocUrl } = require("../src/slackops/api-client");
+    try {
+      const { user, project } = parseDocUrl(url);
+      const channelName = channelNameFor({
+        user,
+        project,
+        test: opts.test === true,
+        channelOverride: opts.channel,
+      });
+      const result = await startBridge({
+        docUrl: url,
+        channelName,
+        stateDir: opts.stateDir,
+        intervalMs: opts.interval ? parseInt(opts.interval, 10) * 1000 : undefined,
+        archiveOnResolve: opts.archive !== false,
+        once: opts.once === true,
+      });
+      if (opts.once && result) {
+        console.log(
+          `markup: cycle done: ${result.posted} posted to Slack, ${result.ingested} ingested${result.archived ? ", channel archived" : ""}`,
+        );
+      }
+    } catch (err) {
       console.error(`markup: ${err.message}`);
       process.exit(1);
     }

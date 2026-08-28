@@ -102,6 +102,16 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 - Rect screenshots on a shared canvas upload as PNGs to the shots endpoint
   (`shotUrl`) instead of traveling inline; other reviewers' thumbnails load
   from the server.
+- Slack ops loop (`docs/slack-ops.md`): `markup share <url>` binds a published
+  doc to a private Slack channel (creates or reuses `#markd-<slug>`, invites
+  reviewers, posts a link card, reopens an archived channel for a new round);
+  `markup bridge <url>` mirrors annotations into the channel as one thread per
+  note and carries thread replies back to the annotations API (`via: "slack"`),
+  with restart-safe on-disk state, ETag polling, and summary + auto-archive
+  when every annotation resolves. Uses the `ld slack` CLI; runs laptop-bound,
+  no Slack app. Includes an in-memory stub of the multiplayer annotations API
+  contract (`test/stub-api.js`) runnable standalone for local testing.
+
 - `markup <file.html>` as shorthand for `markup serve <file.html>`, flags
   included (`markup brief.html --port 9000`). The `serve` word is implied only
   when the first argument is not a known subcommand and an `.html` argument is

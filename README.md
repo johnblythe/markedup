@@ -111,6 +111,13 @@ Total annotations: 5
 - Pin ① on `td` (body > div:nth-of-type(1) > table > tbody > tr:nth-of-type(3) > td:nth-of-type(2)) — text: "At risk": link the rate-limit decision doc here
 ```
 
+## Slack review loop
+
+For team review, `markup share <url>` binds a published doc to a private
+Slack channel and `markup bridge <url>` mirrors annotations into per-note
+threads, carrying thread replies back onto the page. See
+[docs/slack-ops.md](docs/slack-ops.md).
+
 ## Claude Code skill
 
 `skill/SKILL.md` teaches a Claude Code agent to drive this tool: serve the HTML
