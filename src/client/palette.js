@@ -280,3 +280,8 @@ var Palette = (function () {
 
   return { open: open, close: close, isOpen: isOpen };
 })();
+
+// The bundle wraps every module in one IIFE, so `var Palette` above is not a
+// global. overlay.js feature-detects `window.Palette` (it's built as a separate
+// module and must degrade gracefully if absent), so publish it explicitly.
+if (typeof window !== "undefined") window.Palette = Palette;

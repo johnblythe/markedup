@@ -16,6 +16,7 @@ const FILES = [
   "sidebar.js",
   "modes.js",
   "export-client.js",
+  "palette.js",
   "overlay.js",
 ];
 
