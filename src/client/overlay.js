@@ -506,6 +506,27 @@
       true,
     );
 
+    // Clicking outside the open drawer closes it — but never while you're
+    // placing an annotation (an active mode means a doc click is a new mark),
+    // and never when the click lands on the drawer, a popover, or the toolbar
+    // (which docks into the drawer while it's open).
+    document.addEventListener("pointerdown", function (e) {
+      if (!Sidebar.isOpen()) return;
+      if (Modes.getActive && Modes.getActive()) return;
+      if (Popover.isVisible && Popover.isVisible()) return;
+      var t = e.target;
+      if (
+        t &&
+        t.closest &&
+        (t.closest("#markup-sidebar") ||
+          t.closest(".markup-popover") ||
+          t.closest("#markup-toolbar"))
+      ) {
+        return;
+      }
+      Sidebar.close();
+    });
+
     // j/k walks the review, next/previous note, wherever you are on the page.
     document.addEventListener("keydown", function (e) {
       if (e.key !== "j" && e.key !== "k") return;
@@ -601,6 +622,22 @@
         case "d":
           e.preventDefault();
           ExportClient.exportToDisk(sourceKey);
+          break;
+        case "[":
+          // Open the review drawer. Opening it is "looking at" the notes, so
+          // clear the "N new" badge the same way the toggle button does.
+          e.preventDefault();
+          Sidebar.open();
+          if (Persist.isRemote() && Sidebar.isOpen()) {
+            Persist.markSeen();
+            if (typeof window.__MARKUP_UPDATE_COUNT__ === "function") {
+              window.__MARKUP_UPDATE_COUNT__();
+            }
+          }
+          break;
+        case "]":
+          e.preventDefault();
+          Sidebar.close();
           break;
         case "escape":
           // Clear active mode when no popover is open (popover Esc handled in Popover).
