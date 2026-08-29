@@ -97,13 +97,37 @@ async function resolveDoc(docUrl) {
   return { apiBase: url.origin, user: "local", project, docUrl: `${url.origin}/` };
 }
 
+// serve.js derives the local project slug from the source filename this way;
+// kept in sync so the registry fallback below matches what serve mounts.
+function slugFromSourceName(sourceName) {
+  return (
+    String(sourceName)
+      .replace(/\.[^.]+$/, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "artifact"
+  );
+}
+
 async function discoverLocalProject(origin) {
-  // The served page embeds its own API mount (the injected overlay client
-  // talks to /api/local/<slug>/...).
+  // The served page carries the overlay's own config:
+  //   window.__MARKUP_REMOTE__ = {"base":"","user":"local","project":"demo",...}
+  // That project value is authoritative — it's exactly what the client talks to.
   try {
     const res = await fetch(`${origin}/`, { signal: AbortSignal.timeout(5_000) });
     if (res.ok) {
       const html = await res.text();
+      const remote = html.match(/__MARKUP_REMOTE__\s*=\s*(\{[^\n]*?\})\s*;/);
+      if (remote) {
+        try {
+          const cfg = JSON.parse(remote[1]);
+          if (cfg && cfg.project) return cfg.project;
+        } catch (_e) {
+          // malformed literal — fall through to legacy signals
+        }
+      }
+      // Legacy signals, harmless if absent.
       const match =
         html.match(/\/api\/local\/([A-Za-z0-9._~-]+)\//) ||
         html.match(/["']projectSlug["']\s*[:=]\s*["']([A-Za-z0-9._~-]+)["']/);
@@ -112,13 +136,15 @@ async function discoverLocalProject(origin) {
   } catch (_e) {
     // fall through to the registry
   }
-  // Same-machine fallback: the serve instance's registry entry, if it
-  // carries a project slug.
+  // Same-machine fallback: the serve instance's registry entry. It carries the
+  // source filename, from which serve's own slug is reproducible.
   try {
     const registry = require("../registry");
     const entry = registry.find(Number(new URL(origin).port));
-    const slug = entry && (entry.projectSlug || entry.project);
-    if (slug) return slug;
+    if (entry) {
+      if (entry.projectSlug || entry.project) return entry.projectSlug || entry.project;
+      if (entry.sourceName) return slugFromSourceName(entry.sourceName);
+    }
   } catch (_e) {
     // fall through to the error
   }
