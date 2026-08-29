@@ -1,6 +1,6 @@
 // Bootstraps the annotation UI on page load.
-// Sets up the toolbar (mode toggles + export buttons), wires modes, and
-// hydrates persisted annotations.
+// Sets up the toolbar strip (mode segments, export expander, review drawer,
+// ⌘K palette affordance), wires modes, and hydrates persisted annotations.
 
 (function () {
   if (window.__MARKUP_BOOTED__) return;
@@ -14,12 +14,6 @@
     if (opts.action) b.setAttribute("data-action", opts.action);
     if (opts.className) b.className = opts.className;
     return b;
-  }
-
-  function makeRow() {
-    var r = document.createElement("div");
-    r.className = "markup-toolbar-row";
-    return r;
   }
 
   // Shared-canvas badge: names the doc, carries the live "N new" count, and
@@ -150,12 +144,14 @@
     return panel;
   }
 
+  // The strip: one compact row under the badge (or title, in solo mode) --
+  // a 3-segment mode control, an export expander, the review drawer button,
+  // and a small ⌘K affordance. No overflow menu; every export path lives
+  // behind the export icon, and Clear all lives only in the palette.
   function buildToolbar() {
     var toolbar = document.createElement("div");
     toolbar.id = "markup-toolbar";
 
-    // One header for the palette: on a shared canvas the badge (doc name,
-    // N-new pill, presence, ?) IS the header; solo mode keeps the plain title.
     if (Persist.isRemote()) {
       toolbar.appendChild(buildBadge());
     } else {
@@ -165,71 +161,56 @@
       toolbar.appendChild(title);
     }
 
-    var row1 = makeRow();
-    row1.appendChild(makeButton({ text: "Text · T", title: "Highlight text (press T)", mode: "span" }));
-    row1.appendChild(makeButton({ text: "Pin · P", title: "Pin an element (press P)", mode: "pin" }));
-    row1.appendChild(
+    var row = document.createElement("div");
+    row.className = "markup-strip-row";
+
+    var segments = document.createElement("div");
+    segments.className = "markup-strip-segments";
+    segments.appendChild(
+      makeButton({ text: "Text", title: "Highlight text (T)", mode: "span", className: "markup-strip-seg" }),
+    );
+    segments.appendChild(
+      makeButton({ text: "Pin", title: "Pin an element (P)", mode: "pin", className: "markup-strip-seg" }),
+    );
+    segments.appendChild(
       makeButton({
-        text: "Rect · R",
-        title: "Draw a rectangle (press R, or shift-drag anywhere)",
+        text: "Rect",
+        title: "Draw a rectangle (R, or shift-drag anywhere)",
         mode: "rect",
+        className: "markup-strip-seg",
       }),
     );
-    toolbar.appendChild(row1);
+    row.appendChild(segments);
 
-    var row1b = makeRow();
-    row1b.appendChild(
+    // Export: one icon expands to every export path.
+    var exportWrap = document.createElement("div");
+    exportWrap.className = "markup-strip-export markup-toolbar-row-anchor";
+    exportWrap.appendChild(
       makeButton({
-        text: "Highlight · H",
-        title: "Highlight text, no note needed (press H)",
-        mode: "highlight",
-      }),
-    );
-    row1b.appendChild(
-      makeButton({
-        text: "Strike · X",
-        title: "Strikethrough text for removal (press X)",
-        mode: "strike",
-      }),
-    );
-    toolbar.appendChild(row1b);
-
-    // One primary export: everything in this review, as markdown, on the
-    // clipboard — ready to paste at an agent. The rarer paths live in a
-    // small menu behind "⋯".
-    var row2 = makeRow();
-    var copyBtn = makeButton({
-      text: "Copy for your agent · C",
-      title: "Copy every note in this review as markdown (press C), then paste it to your agent",
-      action: "export-clip",
-      className: "markup-btn-primary",
-    });
-    row2.appendChild(copyBtn);
-    row2.appendChild(
-      makeButton({
-        text: "⋯",
-        title: "More export options",
+        text: "⤓",
+        title: "Export this review",
         action: "export-more",
-        className: "markup-btn-more",
+        className: "markup-strip-icon-btn",
       }),
     );
-    toolbar.appendChild(row2);
-
-    var moreMenu = document.createElement("div");
-    moreMenu.className = "markup-export-menu";
-    moreMenu.setAttribute("data-export-menu", "");
+    var exportMenu = document.createElement("div");
+    exportMenu.className = "markup-export-menu";
+    exportMenu.setAttribute("data-export-menu", "");
+    var copyItem = document.createElement("button");
+    copyItem.setAttribute("data-action", "export-clip");
+    copyItem.textContent = "Copy for your agent · C";
+    copyItem.setAttribute("title", "Copy every note in this review as markdown, then paste it to your agent");
+    exportMenu.appendChild(copyItem);
     var diskItem = document.createElement("button");
     diskItem.setAttribute("data-action", "export-disk");
-    diskItem.textContent = Persist.isRemote()
-      ? "Download .md · D"
-      : "Save bundle to disk · D";
+    diskItem.textContent = "Download .md · D";
     diskItem.setAttribute(
       "title",
       Persist.isRemote()
         ? "Download this review as one markdown file (screenshots inlined)"
         : "Write the feedback bundle next to the source file",
     );
-    moreMenu.appendChild(diskItem);
+    exportMenu.appendChild(diskItem);
     if (Persist.isRemote()) {
       var pullItem = document.createElement("button");
       pullItem.setAttribute("data-action", "copy-pull");
@@ -238,30 +219,38 @@
         "title",
         "Copies a terminal command that writes the full bundle with separate PNG files",
       );
-      moreMenu.appendChild(pullItem);
+      exportMenu.appendChild(pullItem);
     }
-    // Anchored to the ⋯ button's row, so it opens as a compact popup beside
-    // the button instead of growing the palette.
-    row2.classList.add("markup-toolbar-row-anchor");
-    row2.appendChild(moreMenu);
+    exportWrap.appendChild(exportMenu);
+    row.appendChild(exportWrap);
 
-    var row3 = makeRow();
-    row3.appendChild(
+    // Drawer: opens/closes the review panel; the pill mirrors the count the
+    // old "Review (N)" text carried.
+    var drawerBtn = document.createElement("button");
+    drawerBtn.className = "markup-strip-icon-btn markup-strip-drawer-btn";
+    drawerBtn.setAttribute("data-action", "sidebar");
+    drawerBtn.setAttribute("title", "Show/hide the review drawer ([ open, ] close)");
+    var drawerLabel = document.createElement("span");
+    drawerLabel.className = "markup-strip-drawer-label";
+    drawerLabel.textContent = "Review";
+    drawerBtn.appendChild(drawerLabel);
+    var drawerCount = document.createElement("span");
+    drawerCount.className = "markup-strip-drawer-count";
+    drawerCount.setAttribute("data-drawer-count", "");
+    drawerCount.style.display = "none";
+    drawerBtn.appendChild(drawerCount);
+    row.appendChild(drawerBtn);
+
+    row.appendChild(
       makeButton({
-        text: "Review",
-        title: "Show/hide the review panel (Open + Pending + Accepted)",
-        action: "sidebar",
+        text: "⌘K",
+        title: "Open the command palette (⌘K)",
+        action: "open-palette",
+        className: "markup-strip-icon-btn markup-strip-palette-btn",
       }),
     );
-    row3.appendChild(
-      makeButton({
-        text: "Clear all",
-        title: "Delete all annotations",
-        action: "clear",
-        className: "markup-popover-danger",
-      }),
-    );
-    toolbar.appendChild(row3);
+
+    toolbar.appendChild(row);
 
     var count = document.createElement("div");
     count.className = "markup-count";
@@ -280,6 +269,8 @@
     var modeButtons = toolbar.querySelectorAll("button[data-mode]");
     var badgeMeta = toolbar.querySelector("[data-badge-meta]");
     var badgeNew = toolbar.querySelector("[data-badge-new]");
+    var drawerBtn = toolbar.querySelector('[data-action="sidebar"]');
+    var drawerCountEl = drawerBtn.querySelector("[data-drawer-count]");
 
     function updateCount() {
       var list = Persist.loadAnnotations(sourceKey);
@@ -329,8 +320,8 @@
     toolbar.querySelector('[data-action="export-disk"]').addEventListener("click", function () {
       ExportClient.exportToDisk(sourceKey);
     });
-    var sidebarBtn = toolbar.querySelector('[data-action="sidebar"]');
-    sidebarBtn.addEventListener("click", function () {
+
+    drawerBtn.addEventListener("click", function () {
       Sidebar.toggle();
       // Opening the review panel is "looking at" the notes — clear the badge's
       // "N new" so it only ever flags genuinely-unseen arrivals.
@@ -340,9 +331,9 @@
       }
     });
 
-    // Floating popups (badge ? panel, ⋯ menu, popover) are mutually
-    // exclusive: opening one closes the others, so the bottom-right never
-    // stacks more than one floating surface.
+    // Floating popups (badge ? panel, export menu, palette, popover) are
+    // mutually exclusive: opening one closes the others, so the bottom-right
+    // never stacks more than one floating surface.
     var badgePanel = toolbar.querySelector(".markup-badge-panel");
     function closeFloatingPopups() {
       if (badgePanel) badgePanel.classList.remove("markup-badge-panel-open");
@@ -356,9 +347,15 @@
         (menu && menu.classList.contains("markup-export-menu-open"))
       );
     }
+    function closePaletteIfOpen() {
+      if (window.Palette && window.Palette.isOpen && window.Palette.isOpen()) {
+        window.Palette.close();
+      }
+    }
     var origPopoverShow = Popover.show;
     Popover.show = function (opts) {
       closeFloatingPopups();
+      closePaletteIfOpen();
       return origPopoverShow(opts);
     };
 
@@ -369,6 +366,7 @@
         el.addEventListener("click", function () {
           var willOpen = !badgePanel.classList.contains("markup-badge-panel-open");
           closeFloatingPopups();
+          closePaletteIfOpen();
           if (Popover.isVisible()) Popover.hide();
           if (willOpen) badgePanel.classList.add("markup-badge-panel-open");
         });
@@ -380,7 +378,7 @@
         });
     }
 
-    // Dock the palette into the drawer while it's open — one column, no
+    // Dock the strip into the drawer while it's open — one column, no
     // floating box overlapping it. Closing the drawer restores the float.
     Sidebar.setVisibilityListener(function (openNow) {
       closeFloatingPopups();
@@ -395,15 +393,20 @@
         document.body.appendChild(toolbar);
       }
     });
-    function updateSidebarBtn() {
+    function updateDrawerButton() {
       var n = Sidebar.pendingCount ? Sidebar.pendingCount() : Sidebar.detachedCount();
-      sidebarBtn.textContent = n > 0 ? "Review (" + n + ")" : "Review";
-      sidebarBtn.classList.toggle("markup-detached-has", n > 0);
+      if (n > 0) {
+        drawerCountEl.textContent = String(n);
+        drawerCountEl.style.display = "";
+      } else {
+        drawerCountEl.style.display = "none";
+      }
+      drawerBtn.classList.toggle("markup-detached-has", n > 0);
     }
-    window.__MARKUP_UPDATE_SIDEBAR_COUNT__ = updateSidebarBtn;
-    updateSidebarBtn();
+    window.__MARKUP_UPDATE_SIDEBAR_COUNT__ = updateDrawerButton;
+    updateDrawerButton();
 
-    toolbar.querySelector('[data-action="clear"]').addEventListener("click", function () {
+    function clearAllAnnotations() {
       var prompt = Persist.isRemote()
         ? "Delete all YOUR annotations on this artifact? (Other reviewers' notes stay.)"
         : "Delete all annotations for this artifact?";
@@ -421,12 +424,24 @@
       Modes.refresh();
       updateCount();
       Toast.show("Cleared all annotations");
-    });
+    }
 
     window.__MARKUP_UPDATE_COUNT__ = updateCount;
 
-    // Export menu: "⋯" toggles it; picking an item (or clicking anywhere
-    // else) closes it.
+    function copyPullCommand() {
+      var cmd = "markup pull " + window.location.origin + window.location.pathname;
+      navigator.clipboard.writeText(cmd).then(
+        function () {
+          Toast.show("Command copied — run it in a terminal to get the full bundle", 3500);
+        },
+        function () {
+          Toast.show(cmd, 6000);
+        },
+      );
+    }
+
+    // Export menu: the "⤓" icon toggles it; picking an item (or clicking
+    // anywhere else) closes it.
     var moreBtn = toolbar.querySelector('[data-action="export-more"]');
     var exportMenu = toolbar.querySelector("[data-export-menu]");
     if (moreBtn && exportMenu) {
@@ -434,6 +449,7 @@
         e.stopPropagation();
         var willOpen = !exportMenu.classList.contains("markup-export-menu-open");
         closeFloatingPopups();
+        closePaletteIfOpen();
         if (Popover.isVisible()) Popover.hide();
         if (willOpen) exportMenu.classList.add("markup-export-menu-open");
       });
@@ -442,17 +458,7 @@
       });
       var pullBtn = toolbar.querySelector('[data-action="copy-pull"]');
       if (pullBtn) {
-        pullBtn.addEventListener("click", function () {
-          var cmd = "markup pull " + window.location.origin + window.location.pathname;
-          navigator.clipboard.writeText(cmd).then(
-            function () {
-              Toast.show("Command copied — run it in a terminal to get the full bundle", 3500);
-            },
-            function () {
-              Toast.show(cmd, 6000);
-            },
-          );
-        });
+        pullBtn.addEventListener("click", copyPullCommand);
       }
     }
 
@@ -473,11 +479,11 @@
       });
     }
 
-    // Escape closes the review drawer, but only when nothing more specific
-    // owns Escape: an open popover cancels first, then an active re-attach,
-    // then a reply composer (which closes itself). Capture phase so this
-    // check runs before their bubble-phase handlers could flip the state it
-    // reads.
+    // Escape closes the topmost surface: an open popover cancels first, then
+    // an active re-attach, then a reply composer, then the command palette,
+    // then a floating popup (badge panel / export menu), then the drawer.
+    // Capture phase so this check runs before their bubble-phase handlers
+    // could flip the state it reads.
     document.addEventListener(
       "keydown",
       function (e) {
@@ -491,6 +497,11 @@
             e.preventDefault();
             Sidebar.closeActiveComposer();
           }
+          return;
+        }
+        if (window.Palette && window.Palette.isOpen && window.Palette.isOpen()) {
+          e.preventDefault();
+          window.Palette.close();
           return;
         }
         if (anyFloatingPopupOpen()) {
@@ -537,6 +548,120 @@
       if (e.key === "j") Sidebar.focusNext();
       else Sidebar.focusPrev();
       reviewOpened();
+    });
+
+    // ---- Command palette ---------------------------------------------------
+    // Feature-detected against window.Palette (owned by a separate module) so
+    // this strip works standalone before that module lands: with no Palette,
+    // ⌘K and the strip's ⌘K button are simply no-ops.
+
+    function buildPaletteCommands() {
+      var commands = [
+        {
+          id: "mode-text",
+          group: "Modes",
+          label: "Text",
+          icon: "Aa",
+          hint: "T",
+          run: function () {
+            setActiveMode(Modes.getActive() === "span" ? null : "span");
+          },
+        },
+        {
+          id: "mode-pin",
+          group: "Modes",
+          label: "Pin",
+          icon: "⌖",
+          hint: "P",
+          run: function () {
+            setActiveMode(Modes.getActive() === "pin" ? null : "pin");
+          },
+        },
+        {
+          id: "mode-rect",
+          group: "Modes",
+          label: "Rect",
+          icon: "▭",
+          hint: "R",
+          run: function () {
+            setActiveMode(Modes.getActive() === "rect" ? null : "rect");
+          },
+        },
+        {
+          id: "review-drawer",
+          group: "Review & export",
+          label: "Review drawer",
+          icon: "▤",
+          hint: "[",
+          run: function () {
+            Sidebar.open();
+            reviewOpened();
+          },
+        },
+        {
+          id: "export-copy",
+          group: "Review & export",
+          label: "Copy for your agent",
+          icon: "⎘",
+          hint: "C",
+          run: function () {
+            ExportClient.exportToClipboard(sourceKey);
+          },
+        },
+        {
+          id: "export-download",
+          group: "Review & export",
+          label: "Download .md",
+          icon: "⤓",
+          hint: "D",
+          run: function () {
+            ExportClient.exportToDisk(sourceKey);
+          },
+        },
+      ];
+      if (Persist.isRemote()) {
+        commands.push({
+          id: "export-pull",
+          group: "Review & export",
+          label: "Copy `markup pull` command",
+          icon: "❯",
+          run: copyPullCommand,
+        });
+      }
+      commands.push({
+        id: "clear-all",
+        group: "Danger",
+        label: "Clear all",
+        icon: "⌫",
+        variant: "danger",
+        run: clearAllAnnotations,
+      });
+      return commands;
+    }
+
+    function openPalette() {
+      if (!window.Palette) return;
+      closeFloatingPopups();
+      if (Popover.isVisible()) Popover.hide();
+      window.Palette.open({ commands: buildPaletteCommands(), onClose: function () {} });
+    }
+
+    function togglePalette() {
+      if (window.Palette && window.Palette.isOpen && window.Palette.isOpen()) {
+        window.Palette.close();
+      } else {
+        openPalette();
+      }
+    }
+
+    toolbar.querySelector('[data-action="open-palette"]').addEventListener("click", togglePalette);
+
+    document.addEventListener("keydown", function (e) {
+      var key = e.key ? e.key.toLowerCase() : "";
+      if (key !== "k" || !(e.metaKey || e.ctrlKey)) return;
+      if (isTypingTarget(e.target)) return;
+      e.preventDefault();
+      togglePalette();
     });
 
     Modes.init(sourceKey);

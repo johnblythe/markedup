@@ -1142,3 +1142,80 @@ mark.markup-span.markup-authored-other {
   border-radius: 3px;
   padding: 1px 5px;
 }
+
+/* ===================== TOOLBAR STRIP ===================== */
+/* Compact bottom-right strip: mode segments + export expander + review
+ * drawer + ⌘K, replacing the old stacked T/P/R + Copy + Review + Clear all
+ * rows and the ⋯ overflow menu. Builds on the existing #markup-toolbar
+ * button/anchor/menu/docking rules above; only new layout and icon-button
+ * treatments live here. */
+
+#markup-toolbar .markup-strip-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+#markup-toolbar .markup-strip-segments {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+}
+
+#markup-toolbar button.markup-strip-seg {
+  flex: 1;
+  border: 0;
+  border-right: 1px solid var(--markup-border);
+  border-radius: 0;
+}
+
+#markup-toolbar button.markup-strip-seg:last-child {
+  border-right: 0;
+}
+
+#markup-toolbar .markup-strip-export {
+  flex: 0 0 auto;
+}
+
+#markup-toolbar button.markup-strip-icon-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+#markup-toolbar button.markup-strip-drawer-btn {
+  width: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 9px;
+}
+
+#markup-toolbar .markup-strip-drawer-label {
+  white-space: nowrap;
+}
+
+#markup-toolbar .markup-strip-drawer-count {
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--markup-accent-light);
+  border-radius: 8px;
+  padding: 1px 6px;
+  line-height: 1.3;
+}
+
+#markup-toolbar button.markup-strip-palette-btn {
+  width: auto;
+  padding: 6px 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--markup-muted);
+}
+
+#markup-toolbar button.markup-strip-palette-btn:hover {
+  color: var(--markup-text);
+}

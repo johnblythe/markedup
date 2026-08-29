@@ -172,6 +172,38 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 - `registry.find(port)` and `registry.findDash()` for locating a specific
   instance or the singleton dashboard.
 
+### Changed
+
+- Another reviewer's note opens read-only: the popover shows their words with
+  author and time, and offers exactly the actions that work — Resolve, Reply
+  (jumps to the drawer composer), Close. The drawer likewise hides Remove and
+  Re-attach on notes you don't own. Your own notes keep the full editor. Solo
+  mode is unchanged.
+- Popover buttons regrouped: Remove sits alone at the far left, and the
+  action group (Resolve · Cancel · Save) holds the right edge with the
+  primary always rightmost.
+- The "⋯" export options open as a compact popup anchored to the button —
+  only the two secondary items — closing on outside click or Esc.
+- One floating surface: the shared-canvas badge (name, N-new pill, presence,
+  ?) is the palette's header instead of a box within it; the palette docks
+  into the review drawer while the drawer is open and floats again when it
+  closes; the badge panel, ⋯ menu, and popover are mutually exclusive; Esc
+  dismisses one surface at a time (popover → re-attach → composer → popup →
+  drawer), and now closes the reply composer from anywhere on the page.
+- Toolbar redesigned into a single compact strip: a 3-segment Text/Pin/Rect
+  control replaces the stacked mode buttons, an export icon expands to
+  "Copy for your agent," "Download .md," and (remote only) "Copy
+  `markup pull` command," and a drawer button shows the unseen count and
+  opens/closes review. The old "⋯" overflow menu is gone — its items now
+  live in the export expander and the new command palette below.
+- ⌘K/Ctrl+K opens a command palette (guarded so it doesn't fire while
+  typing in a note or reply) grouping Modes, Review & export, and Danger
+  (Clear all) behind one search-and-run list, wired to the same handlers
+  as the strip so nothing is duplicated. Esc closes the palette before
+  falling through to the drawer. The palette module itself ships
+  separately; the strip feature-detects it and degrades to a no-op ⌘K if
+  it isn't present.
+
 ### Fixed
 
 - Keystrokes typed into MarkedUp's own text-entry surfaces (popover note
