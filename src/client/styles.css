@@ -665,14 +665,12 @@ mark.markup-span.markup-authored-other {
   border-color: #7048b6;
 }
 
-/* Shared-canvas badge in the toolbar chrome. */
+/* Shared-canvas badge: the palette's header, not a box within the box. */
 #markup-toolbar .markup-badge {
   position: relative;
-  margin: -2px 0 4px;
-  padding: 6px;
-  background: #f5f5f5;
-  border: 1px solid var(--markup-border);
-  border-radius: 6px;
+  margin: 0 0 6px;
+  padding: 0 0 6px;
+  border-bottom: 1px solid var(--markup-border);
 }
 
 #markup-toolbar .markup-badge-line {
@@ -945,4 +943,72 @@ mark.markup-span.markup-authored-other {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* --- Consolidated chrome: anchored popups + docked palette --------------- */
+
+/* The ⋯ menu opens as a compact popup beside its button, never inline. */
+#markup-toolbar .markup-toolbar-row-anchor {
+  position: relative;
+}
+
+#markup-toolbar .markup-export-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  width: max-content;
+  max-width: 240px;
+  margin-top: 0;
+  z-index: 2;
+}
+
+/* While the review drawer is open the palette docks inside it. */
+#markup-toolbar.markup-toolbar-docked {
+  position: static;
+  min-width: 0;
+  width: auto;
+  border: none;
+  border-bottom: 1px solid var(--markup-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Docked, popups open downward — the palette sits at the drawer's top. */
+#markup-toolbar.markup-toolbar-docked .markup-badge-panel {
+  bottom: auto;
+  top: 100%;
+  margin-bottom: 0;
+  margin-top: 8px;
+  z-index: 2;
+}
+
+#markup-toolbar.markup-toolbar-docked .markup-export-menu {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
+/* --- Read-only popover (another reviewer's note) -------------------------- */
+
+#markup-popover .markup-popover-meta {
+  font-size: 10px;
+  font-weight: 600;
+  color: #7048b6;
+  margin-bottom: 4px;
+}
+
+#markup-popover .markup-popover-note {
+  font-size: 12px;
+  color: var(--markup-text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 6px;
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
+#markup-popover .markup-popover-spacer {
+  flex: 1;
 }

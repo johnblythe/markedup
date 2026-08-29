@@ -101,6 +101,21 @@ function createAnnotationStore(sourcePath) {
     const existing = idx === -1 ? null : doc.annotations[idx];
     if (existing && existing.deleted) return err(410, "annotation deleted");
 
+    // Mirrors the Worker: only the author edits content; anyone may drive
+    // status transitions, so cross-author PUTs must leave note/anchor/payload
+    // byte-identical.
+    if (existing && existing.author && existing.author !== author) {
+      const same = (a, b) =>
+        JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b);
+      if (
+        !same(body.note, existing.note) ||
+        !same(body.anchor, existing.anchor) ||
+        !same(body.payload, existing.payload)
+      ) {
+        return err(403, `only ${existing.author} can edit this note`);
+      }
+    }
+
     const merged = {
       ...body,
       author: (existing && existing.author) || author,

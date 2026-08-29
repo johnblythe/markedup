@@ -89,14 +89,23 @@ test(
     });
     assert.strictEqual(cached.status, 304);
 
-    // Another identity edits: LWW, creator preserved, editor recorded.
-    const edit = await api(base, "PUT", "/api/local/report/annotations/anno-a1", {
+    // Another identity rewriting the note's content → refused (author-only).
+    const noteEdit = await api(base, "PUT", "/api/local/report/annotations/anno-a1", {
       body: { ...PIN, note: "edited" },
       headers: { "X-Markup-User": "eng@ld.com" },
     });
-    assert.strictEqual(edit.json.note, "edited");
-    assert.strictEqual(edit.json.author, "john@ld.com");
-    assert.strictEqual(edit.json.lastEditedBy, "eng@ld.com");
+    assert.strictEqual(noteEdit.status, 403);
+
+    // But a status transition (resolve) from another identity is allowed.
+    const resolve = await api(base, "PUT", "/api/local/report/annotations/anno-a1", {
+      body: { ...PIN, status: "accepted" },
+      headers: { "X-Markup-User": "eng@ld.com" },
+    });
+    assert.strictEqual(resolve.status, 200);
+    assert.strictEqual(resolve.json.state, "resolved");
+    assert.strictEqual(resolve.json.note, PIN.note);
+    assert.strictEqual(resolve.json.author, "john@ld.com");
+    assert.strictEqual(resolve.json.lastEditedBy, "eng@ld.com");
 
     const list2 = await api(base, "GET", "/api/local/report/annotations", {
       headers: { "If-None-Match": etag },

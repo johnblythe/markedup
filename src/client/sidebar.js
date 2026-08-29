@@ -43,6 +43,12 @@ var Sidebar = (function () {
     panelEl = document.createElement("aside");
     panelEl.id = "markup-sidebar";
 
+    // While the drawer is open the floating palette docks here, so the
+    // bottom-right never shows two competing surfaces.
+    var dock = document.createElement("div");
+    dock.className = "markup-sidebar-dock";
+    panelEl.appendChild(dock);
+
     var header = document.createElement("div");
     header.className = "markup-sidebar-header";
 
@@ -236,6 +242,12 @@ var Sidebar = (function () {
     return !!activeComposer;
   }
 
+  // Esc pressed anywhere (not just inside the textarea) closes the composer:
+  // dismissal walks outward one surface at a time.
+  function closeActiveComposer() {
+    closeComposer();
+  }
+
   function buildEntry(anno, status) {
     var entry = document.createElement("div");
     entry.className = "markup-sidebar-entry markup-sidebar-entry-" + status;
@@ -315,28 +327,37 @@ var Sidebar = (function () {
     var actions = document.createElement("div");
     actions.className = "markup-sidebar-actions";
 
+    // Only the author edits or removes a note (or re-attaches it — that
+    // rewrites its anchor). Anyone may resolve, re-open, and reply, so
+    // another reviewer's entry offers exactly those.
+    var owns = !(Persist.isRemote && Persist.isRemote()) || !anno.author || anno.author === Persist.self();
+
+    function removeBtn() {
+      return makeBtn("Remove", "markup-sidebar-btn-danger", function () {
+        if (!confirm("Remove this annotation? Cannot undo.")) return;
+        if (handlers.onRemove) handlers.onRemove(anno);
+      });
+    }
+
     if (status === "pending") {
       actions.appendChild(
         makeBtn("Where it was", "", function () {
           if (handlers.onShowContext) handlers.onShowContext(anno);
         }),
       );
-      actions.appendChild(
-        makeBtn("Re-attach", "", function () {
-          if (handlers.onReattach) handlers.onReattach(anno);
-        }),
-      );
+      if (owns) {
+        actions.appendChild(
+          makeBtn("Re-attach", "", function () {
+            if (handlers.onReattach) handlers.onReattach(anno);
+          }),
+        );
+      }
       actions.appendChild(
         makeBtn("Resolve", "markup-sidebar-btn-primary", function () {
           if (handlers.onAccept) handlers.onAccept(anno);
         }),
       );
-      actions.appendChild(
-        makeBtn("Remove", "markup-sidebar-btn-danger", function () {
-          if (!confirm("Remove this annotation? Cannot undo.")) return;
-          if (handlers.onRemove) handlers.onRemove(anno);
-        }),
-      );
+      if (owns) actions.appendChild(removeBtn());
     } else if (status === "open") {
       actions.appendChild(
         makeBtn("Where it is", "", function () {
@@ -348,12 +369,7 @@ var Sidebar = (function () {
           if (handlers.onAccept) handlers.onAccept(anno);
         }),
       );
-      actions.appendChild(
-        makeBtn("Remove", "markup-sidebar-btn-danger", function () {
-          if (!confirm("Remove this annotation? Cannot undo.")) return;
-          if (handlers.onRemove) handlers.onRemove(anno);
-        }),
-      );
+      if (owns) actions.appendChild(removeBtn());
     } else if (status === "accepted") {
       actions.appendChild(
         makeBtn("Where it was", "", function () {
@@ -365,12 +381,7 @@ var Sidebar = (function () {
           if (handlers.onReopen) handlers.onReopen(anno);
         }),
       );
-      actions.appendChild(
-        makeBtn("Remove", "markup-sidebar-btn-danger", function () {
-          if (!confirm("Remove this annotation? Cannot undo.")) return;
-          if (handlers.onRemove) handlers.onRemove(anno);
-        }),
-      );
+      if (owns) actions.appendChild(removeBtn());
     }
     entry.appendChild(actions);
     return entry;
@@ -546,6 +557,22 @@ var Sidebar = (function () {
     focusAt(walkIndex - 1);
   }
 
+  // Open the drawer landed on one annotation with its reply composer ready.
+  // The entry's own Reply button carries the wiring — click it.
+  function openReply(annoId) {
+    open();
+    for (var i = 0; i < walkList.length; i++) {
+      if (walkList[i].id === annoId) {
+        focusAt(i);
+        break;
+      }
+    }
+    var entry = listEl.querySelector('.markup-sidebar-entry[data-anno-id="' + annoId + '"]');
+    if (!entry) return;
+    var btn = entry.querySelector(".markup-sidebar-reply-btn");
+    if (btn) btn.click();
+  }
+
   function setBanner(opts) {
     ensureBuilt();
     if (!opts || !opts.message) {
@@ -587,6 +614,13 @@ var Sidebar = (function () {
     }
   }
 
+  // One listener (the overlay) hears open/close so it can dock the palette
+  // into the drawer and dismiss floating popups.
+  var visibilityListener = null;
+  function setVisibilityListener(cb) {
+    visibilityListener = cb;
+  }
+
   function open() {
     ensureBuilt();
     if (!panelEl.classList.contains("markup-sidebar-open")) {
@@ -596,12 +630,15 @@ var Sidebar = (function () {
       walkIndex = -1;
       panelEl.classList.add("markup-sidebar-open");
       render();
+      if (visibilityListener) visibilityListener(true);
     }
   }
   function close() {
     if (!panelEl) return;
+    if (!panelEl.classList.contains("markup-sidebar-open")) return;
     closeComposer();
     panelEl.classList.remove("markup-sidebar-open");
+    if (visibilityListener) visibilityListener(false);
   }
   function toggle() {
     ensureBuilt();
@@ -633,6 +670,9 @@ var Sidebar = (function () {
     pendingCount: pendingCount,
     focusNext: focusNext,
     focusPrev: focusPrev,
+    openReply: openReply,
     hasActiveComposer: hasActiveComposer,
+    closeActiveComposer: closeActiveComposer,
+    setVisibilityListener: setVisibilityListener,
   };
 })();

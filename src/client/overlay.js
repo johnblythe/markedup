@@ -154,15 +154,15 @@
     var toolbar = document.createElement("div");
     toolbar.id = "markup-toolbar";
 
-    var title = document.createElement("div");
-    title.className = "markup-toolbar-title";
-    title.textContent = "Markup";
-    toolbar.appendChild(title);
-
-    // Shared canvas: badge with the doc name, a live "N new" count, and a
-    // help panel. Solo/localStorage mode shows none of this.
+    // One header for the palette: on a shared canvas the badge (doc name,
+    // N-new pill, presence, ?) IS the header; solo mode keeps the plain title.
     if (Persist.isRemote()) {
       toolbar.appendChild(buildBadge());
+    } else {
+      var title = document.createElement("div");
+      title.className = "markup-toolbar-title";
+      title.textContent = "Markup";
+      toolbar.appendChild(title);
     }
 
     var row1 = makeRow();
@@ -240,7 +240,10 @@
       );
       moreMenu.appendChild(pullItem);
     }
-    toolbar.appendChild(moreMenu);
+    // Anchored to the ⋯ button's row, so it opens as a compact popup beside
+    // the button instead of growing the palette.
+    row2.classList.add("markup-toolbar-row-anchor");
+    row2.appendChild(moreMenu);
 
     var row3 = makeRow();
     row3.appendChild(
@@ -337,13 +340,37 @@
       }
     });
 
+    // Floating popups (badge ? panel, ⋯ menu, popover) are mutually
+    // exclusive: opening one closes the others, so the bottom-right never
+    // stacks more than one floating surface.
+    var badgePanel = toolbar.querySelector(".markup-badge-panel");
+    function closeFloatingPopups() {
+      if (badgePanel) badgePanel.classList.remove("markup-badge-panel-open");
+      var menu = toolbar.querySelector("[data-export-menu]");
+      if (menu) menu.classList.remove("markup-export-menu-open");
+    }
+    function anyFloatingPopupOpen() {
+      var menu = toolbar.querySelector("[data-export-menu]");
+      return (
+        (badgePanel && badgePanel.classList.contains("markup-badge-panel-open")) ||
+        (menu && menu.classList.contains("markup-export-menu-open"))
+      );
+    }
+    var origPopoverShow = Popover.show;
+    Popover.show = function (opts) {
+      closeFloatingPopups();
+      return origPopoverShow(opts);
+    };
+
     // Shared-canvas badge: toggle the help panel; both the label and the "?"
     // open it, the "×" closes it.
-    var badgePanel = toolbar.querySelector(".markup-badge-panel");
     if (badgePanel) {
       toolbar.querySelectorAll('[data-action="badge-toggle"]').forEach(function (el) {
         el.addEventListener("click", function () {
-          badgePanel.classList.toggle("markup-badge-panel-open");
+          var willOpen = !badgePanel.classList.contains("markup-badge-panel-open");
+          closeFloatingPopups();
+          if (Popover.isVisible()) Popover.hide();
+          if (willOpen) badgePanel.classList.add("markup-badge-panel-open");
         });
       });
       toolbar
@@ -352,6 +379,22 @@
           badgePanel.classList.remove("markup-badge-panel-open");
         });
     }
+
+    // Dock the palette into the drawer while it's open — one column, no
+    // floating box overlapping it. Closing the drawer restores the float.
+    Sidebar.setVisibilityListener(function (openNow) {
+      closeFloatingPopups();
+      if (openNow) {
+        var dockEl = document.querySelector("#markup-sidebar .markup-sidebar-dock");
+        if (dockEl) {
+          dockEl.appendChild(toolbar);
+          toolbar.classList.add("markup-toolbar-docked");
+        }
+      } else if (toolbar.classList.contains("markup-toolbar-docked")) {
+        toolbar.classList.remove("markup-toolbar-docked");
+        document.body.appendChild(toolbar);
+      }
+    });
     function updateSidebarBtn() {
       var n = Sidebar.pendingCount ? Sidebar.pendingCount() : Sidebar.detachedCount();
       sidebarBtn.textContent = n > 0 ? "Review (" + n + ")" : "Review";
@@ -389,7 +432,10 @@
     if (moreBtn && exportMenu) {
       moreBtn.addEventListener("click", function (e) {
         e.stopPropagation();
-        exportMenu.classList.toggle("markup-export-menu-open");
+        var willOpen = !exportMenu.classList.contains("markup-export-menu-open");
+        closeFloatingPopups();
+        if (Popover.isVisible()) Popover.hide();
+        if (willOpen) exportMenu.classList.add("markup-export-menu-open");
       });
       document.addEventListener("click", function () {
         exportMenu.classList.remove("markup-export-menu-open");
@@ -438,7 +484,20 @@
         if (e.key !== "Escape") return;
         if (Popover.isVisible()) return;
         if (Modes.isReattaching && Modes.isReattaching()) return;
-        if (Sidebar.hasActiveComposer && Sidebar.hasActiveComposer()) return;
+        if (Sidebar.hasActiveComposer && Sidebar.hasActiveComposer()) {
+          // Inside the textarea its own handler closes it; from anywhere
+          // else, close it here — Esc always dismisses one surface.
+          if (!(e.target && e.target.tagName === "TEXTAREA")) {
+            e.preventDefault();
+            Sidebar.closeActiveComposer();
+          }
+          return;
+        }
+        if (anyFloatingPopupOpen()) {
+          e.preventDefault();
+          closeFloatingPopups();
+          return;
+        }
         if (Sidebar.isOpen()) {
           e.preventDefault();
           Sidebar.close();

@@ -4,10 +4,27 @@
 var Popover = (function () {
   var el = null;
   var textarea = null;
+  var viewEl = null;
+  var noteEl = null;
+  var metaEl = null;
+  var btnRow = null;
+  var spacerEl = null;
   var saveBtn = null;
   var cancelBtn = null;
   var deleteBtn = null;
+  var acceptBtn = null;
+  var replyBtn = null;
   var currentHandlers = null;
+
+  function relTime(iso) {
+    var t = Date.parse(iso);
+    if (!isFinite(t)) return "";
+    var s = Math.max(0, (Date.now() - t) / 1000);
+    if (s < 45) return "just now";
+    if (s < 3600) return Math.round(s / 60) + "m ago";
+    if (s < 86400) return Math.round(s / 3600) + "h ago";
+    return new Date(t).toLocaleDateString();
+  }
 
   function ensureBuilt() {
     if (el) return el;
@@ -18,16 +35,36 @@ var Popover = (function () {
     textarea.setAttribute("placeholder", "Leave a note...");
     el.appendChild(textarea);
 
-    var btnRow = document.createElement("div");
+    // Read-only view for another reviewer's note: their words aren't yours
+    // to edit, so the popover shows them with attribution instead of a form.
+    viewEl = document.createElement("div");
+    viewEl.className = "markup-popover-view";
+    viewEl.style.display = "none";
+    metaEl = document.createElement("div");
+    metaEl.className = "markup-popover-meta";
+    viewEl.appendChild(metaEl);
+    noteEl = document.createElement("div");
+    noteEl.className = "markup-popover-note";
+    viewEl.appendChild(noteEl);
+    el.appendChild(viewEl);
+
+    btnRow = document.createElement("div");
     btnRow.className = "markup-popover-buttons";
 
+    // Destructive action isolated far left; a flexible spacer pushes the
+    // action group (Resolve · Cancel · Save, or Resolve … Close · Reply) to
+    // the right edge so the primary is always the rightmost button.
     deleteBtn = document.createElement("button");
     deleteBtn.className = "markup-popover-delete markup-popover-danger";
     deleteBtn.style.display = "none";
     deleteBtn.textContent = "Remove";
     btnRow.appendChild(deleteBtn);
 
-    var acceptBtn = document.createElement("button");
+    spacerEl = document.createElement("span");
+    spacerEl.className = "markup-popover-spacer";
+    btnRow.appendChild(spacerEl);
+
+    acceptBtn = document.createElement("button");
     acceptBtn.className = "markup-popover-accept";
     acceptBtn.style.display = "none";
     acceptBtn.textContent = "Resolve";
@@ -44,6 +81,12 @@ var Popover = (function () {
     saveBtn.textContent = "Save";
     btnRow.appendChild(saveBtn);
 
+    replyBtn = document.createElement("button");
+    replyBtn.className = "markup-popover-reply markup-popover-primary";
+    replyBtn.style.display = "none";
+    replyBtn.textContent = "Reply";
+    btnRow.appendChild(replyBtn);
+
     el.appendChild(btnRow);
 
     acceptBtn.addEventListener("click", function () {
@@ -51,6 +94,11 @@ var Popover = (function () {
         currentHandlers.onAccept();
       }
       hide();
+    });
+    replyBtn.addEventListener("click", function () {
+      var onReply = currentHandlers && currentHandlers.onReply;
+      hide();
+      if (onReply) onReply();
     });
     document.body.appendChild(el);
 
@@ -129,6 +177,9 @@ var Popover = (function () {
     el.style.top = Math.round(top) + "px";
   }
 
+  // opts.readOnly renders another reviewer's note: text + attribution, no
+  // editing — the actions offered are exactly the ones that work (Resolve,
+  // Reply). Own notes get the full editor.
   function show(opts) {
     ensureBuilt();
     currentHandlers = {
@@ -136,13 +187,38 @@ var Popover = (function () {
       onCancel: opts.onCancel,
       onDelete: opts.onDelete,
       onAccept: opts.onAccept,
+      onReply: opts.onReply,
     };
-    textarea.value = opts.initialText || "";
-    deleteBtn.style.display = opts.canDelete ? "inline-block" : "none";
-    el._acceptBtn.style.display = opts.canAccept ? "inline-block" : "none";
+
+    var readOnly = opts.readOnly === true;
+    textarea.style.display = readOnly ? "none" : "";
+    viewEl.style.display = readOnly ? "" : "none";
+    saveBtn.style.display = readOnly ? "none" : "inline-block";
+    replyBtn.style.display = readOnly && opts.onReply ? "inline-block" : "none";
+    deleteBtn.style.display = !readOnly && opts.canDelete ? "inline-block" : "none";
+    acceptBtn.style.display = opts.canAccept ? "inline-block" : "none";
+    cancelBtn.textContent = readOnly ? "Close" : "Cancel";
+
+    if (readOnly) {
+      noteEl.textContent = opts.initialText || "(no note)";
+      var who = String(opts.author || "").split("@")[0];
+      metaEl.textContent = who + (opts.createdAt ? " · " + relTime(opts.createdAt) : "");
+      metaEl.setAttribute("title", opts.author || "");
+      // Resolve reads as this note's status action: left slot, before the spacer.
+      btnRow.insertBefore(acceptBtn, spacerEl);
+    } else {
+      textarea.value = opts.initialText || "";
+      // Resolve joins the right-edge action group, never splitting Cancel/Save.
+      btnRow.insertBefore(acceptBtn, cancelBtn);
+    }
+
     el.classList.add("markup-popover-visible");
     positionAt(opts.anchorRect);
     setTimeout(function () {
+      if (readOnly) {
+        (opts.onReply ? replyBtn : cancelBtn).focus();
+        return;
+      }
       textarea.focus();
       var len = textarea.value.length;
       textarea.setSelectionRange(len, len);

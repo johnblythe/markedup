@@ -151,6 +151,22 @@ var Modes = (function () {
     return changed;
   }
 
+  // Whose note is this? On a shared canvas only the author edits or removes
+  // it; anyone may resolve/re-open (contract: either party) and reply. Solo
+  // mode owns everything.
+  function ownsAnno(anno) {
+    if (!Persist.isRemote()) return true;
+    return !anno.author || anno.author === Persist.self();
+  }
+
+  // Reply from a popover: land in the drawer with this note's composer open.
+  function replyVia(anno) {
+    if (!Persist.isRemote()) return undefined;
+    return function () {
+      Sidebar.openReply(anno.id);
+    };
+  }
+
   // Shared canvas: mark inline artifacts (pin badge, span mark, rect box)
   // with their author. Someone else's annotations get a distinct look.
   function decorateAuthored(anno) {
@@ -561,7 +577,11 @@ var Modes = (function () {
         Popover.show({
           anchorRect: t.getBoundingClientRect(),
           initialText: anno.note,
-          canDelete: true,
+          readOnly: !ownsAnno(anno),
+          author: anno.author,
+          createdAt: anno.createdAt,
+          onReply: replyVia(anno),
+          canDelete: ownsAnno(anno),
           canAccept: true,
           onSave: function (note) {
             anno.note = note;
@@ -797,7 +817,11 @@ var Modes = (function () {
     Popover.show({
       anchorRect: badge.getBoundingClientRect(),
       initialText: anno.note,
-      canDelete: true,
+      readOnly: !ownsAnno(anno),
+      author: anno.author,
+      createdAt: anno.createdAt,
+      onReply: replyVia(anno),
+      canDelete: ownsAnno(anno),
       canAccept: true,
       onSave: function (note) {
         anno.note = note;
@@ -1000,7 +1024,11 @@ var Modes = (function () {
     Popover.show({
       anchorRect: box.getBoundingClientRect(),
       initialText: anno.note,
-      canDelete: true,
+      readOnly: !ownsAnno(anno),
+      author: anno.author,
+      createdAt: anno.createdAt,
+      onReply: replyVia(anno),
+      canDelete: ownsAnno(anno),
       canAccept: true,
       onSave: function (note) {
         anno.note = note;
