@@ -63,6 +63,70 @@ function assertTrustedOrigin(apiBase) {
   );
 }
 
+// Persona/identity params are per-viewer; they never belong in persisted
+// state or on the link card.
+function stripPersonaParams(docUrl) {
+  const clean = new URL(docUrl);
+  clean.searchParams.delete("persona");
+  clean.searchParams.delete("as");
+  clean.hash = "";
+  return clean.toString();
+}
+
+// Resolve a doc URL to { apiBase, user, project, docUrl }. A URL with
+// {user}/{project} path segments parses directly. A bare localhost root is
+// what `markup serve --multiplayer` prints (e.g. http://127.0.0.1:7790/?persona=jb):
+// the serve instance mounts /api/local/<projectSlug>/, so discover the slug
+// from the running instance. Non-local roots keep the existing refusal.
+async function resolveDoc(docUrl) {
+  let url;
+  try {
+    url = new URL(docUrl);
+  } catch (_e) {
+    throw new Error(`not a valid URL: ${docUrl}`);
+  }
+  const segments = url.pathname.split("/").filter(Boolean);
+  if (segments.length && segments[segments.length - 1].includes(".")) segments.pop();
+  if (segments.length >= 2) {
+    return { ...parseDocUrl(docUrl), docUrl: stripPersonaParams(docUrl) };
+  }
+  if (!isLocalOrigin(url.origin)) {
+    return parseDocUrl(docUrl); // throws the usual "cannot derive" error
+  }
+  const project = await discoverLocalProject(url.origin);
+  return { apiBase: url.origin, user: "local", project, docUrl: `${url.origin}/` };
+}
+
+async function discoverLocalProject(origin) {
+  // The served page embeds its own API mount (the injected overlay client
+  // talks to /api/local/<slug>/...).
+  try {
+    const res = await fetch(`${origin}/`, { signal: AbortSignal.timeout(5_000) });
+    if (res.ok) {
+      const html = await res.text();
+      const match =
+        html.match(/\/api\/local\/([A-Za-z0-9._~-]+)\//) ||
+        html.match(/["']projectSlug["']\s*[:=]\s*["']([A-Za-z0-9._~-]+)["']/);
+      if (match) return match[1];
+    }
+  } catch (_e) {
+    // fall through to the registry
+  }
+  // Same-machine fallback: the serve instance's registry entry, if it
+  // carries a project slug.
+  try {
+    const registry = require("../registry");
+    const entry = registry.find(Number(new URL(origin).port));
+    const slug = entry && (entry.projectSlug || entry.project);
+    if (slug) return slug;
+  } catch (_e) {
+    // fall through to the error
+  }
+  throw new Error(
+    `could not discover the local project behind ${origin}; is \`markup serve --multiplayer\` running there? You can also pass the full URL: ${origin}/local/<project>/`,
+  );
+}
+
 function authHeaders(asUser, apiBase) {
   const headers = {};
   if (asUser) headers["X-Markup-User"] = asUser;
@@ -114,6 +178,8 @@ async function postReply({ apiBase, user, project, annoId, text, via, asUser }) 
 
 module.exports = {
   parseDocUrl,
+  resolveDoc,
+  stripPersonaParams,
   fetchAnnotations,
   postReply,
   authHeaders,

@@ -70,6 +70,23 @@ markup bridge https://<host>/eng/board-audit/
 5. Accept annotations on the page as they are addressed; when the last one
    is accepted, the channel archives itself and the bridge exits.
 
+## Local sandbox
+
+To rehearse the whole loop without the Worker, run it against a local
+multiplayer serve and a test channel:
+
+```bash
+markup serve report.html --multiplayer     # prints http://127.0.0.1:<port>/?persona=jb
+markup share http://127.0.0.1:<port>/ --test --owner jb
+markup bridge http://127.0.0.1:<port>/ --test --owner jb
+```
+
+Both commands accept the serve root URL as printed (persona param included);
+they discover the local project behind it and keep the plain root URL on the
+link card. Open the page as another persona (`?persona=jb2`) and leave notes:
+they land in the `#markd-test-…` channel and, coming from someone other than
+the owner, exercise the digest.
+
 ## Limits (v1)
 
 - The bridge runs on your machine and mirrors only while it is up. Nothing

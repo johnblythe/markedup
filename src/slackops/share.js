@@ -6,7 +6,7 @@ const os = require("node:os");
 const stateStore = require("./state");
 const format = require("./format");
 const defaultSlack = require("./slack-cli");
-const { parseDocUrl, assertTrustedOrigin, authHeaders, fetchAnnotations } = require("./api-client");
+const { resolveDoc, assertTrustedOrigin, authHeaders, fetchAnnotations } = require("./api-client");
 
 const PREFIX = "markd-";
 const TEST_PREFIX = "markd-test-";
@@ -81,7 +81,11 @@ async function shareDoc({
   slack = defaultSlack,
   log = console.log,
 }) {
-  const { apiBase, user, project } = parseDocUrl(docUrl);
+  // Resolves {user}/{project} from the path, or discovers them from a local
+  // `markup serve --multiplayer` root URL; strips per-viewer query params.
+  const resolved = await resolveDoc(docUrl);
+  const { apiBase, user, project } = resolved;
+  docUrl = resolved.docUrl;
   // Refuse untrusted origins before anything is persisted or contacted.
   assertTrustedOrigin(apiBase);
   await probeCanvas({ apiBase, user, project }, probeDelays, log);

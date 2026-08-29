@@ -120,6 +120,10 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
   when every annotation is accepted. Uses the `ld slack` CLI; runs laptop-bound,
   no Slack app. Includes an in-memory stub of the multiplayer annotations API
   contract (`test/stub-api.js`) runnable standalone for local testing.
+  Share/bridge accept a local `markup serve --multiplayer` root URL as
+  printed (persona param included): the local project is discovered from the
+  running instance, per-viewer params are stripped from anything persisted,
+  and the link card carries the plain root URL.
   Owner digest: `--owner <email>` makes the bridge post one coalesced,
   debounced heads-up when others annotate (channel message by default,
   `--nudge-to dm` for a DM, `--nudge-to off` to disable), and `markup share`

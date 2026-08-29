@@ -11,7 +11,7 @@ const format = require("../src/slackops/format");
 const { planActions, planIngest, authorForSlackUser } = require("../src/slackops/plan");
 const { runCycle, pseudoPortFor } = require("../src/slackops/bridge");
 const { shareDoc, channelNameFor, slugify, fetchDocTitle } = require("../src/slackops/share");
-const { parseDocUrl, assertTrustedOrigin, authHeaders } = require("../src/slackops/api-client");
+const { parseDocUrl, resolveDoc, assertTrustedOrigin, authHeaders } = require("../src/slackops/api-client");
 const { buildArgs } = require("../src/slackops/slack-cli");
 const { startStub } = require("./stub-api");
 
@@ -295,6 +295,92 @@ test("archiveOnResolve false leaves the channel open", async () => {
   await runCycle({ state, stateDir, slack, api, archiveOnResolve: false, ...quiet });
   assert.equal(slack.archived, false);
   assert.equal(state.archived, false);
+});
+
+// ---------------------------------------------------------------------------
+// local serve root URLs (persona sandbox)
+
+function fakeServe(html) {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(html);
+  });
+  return new Promise((resolve) =>
+    server.listen(0, "127.0.0.1", () =>
+      resolve({ server, origin: `http://127.0.0.1:${server.address().port}` }),
+    ),
+  );
+}
+
+test("resolveDoc: localhost serve root discovers the local project, strips persona", async () => {
+  const { server, origin } = await fakeServe(
+    '<html><head><title>Sandbox</title></head><body><script>fetch("/api/local/board-audit/annotations")</script></body></html>',
+  );
+  try {
+    const resolved = await resolveDoc(`${origin}/?persona=jb`);
+    assert.deepEqual(resolved, {
+      apiBase: origin,
+      user: "local",
+      project: "board-audit",
+      docUrl: `${origin}/`,
+    });
+  } finally {
+    server.close();
+  }
+});
+
+test("resolveDoc: path URLs resolve as before, per-viewer params stripped", async () => {
+  const resolved = await resolveDoc("https://h.dev/eng/audit/?persona=jb&as=x");
+  assert.deepEqual(resolved, {
+    apiBase: "https://h.dev",
+    user: "eng",
+    project: "audit",
+    docUrl: "https://h.dev/eng/audit/",
+  });
+});
+
+test("resolveDoc: non-localhost root keeps the existing refusal", async () => {
+  await assert.rejects(resolveDoc("https://evil.dev/"), /cannot derive/);
+});
+
+test("resolveDoc: undiscoverable local root fails with guidance", async () => {
+  const { server, origin } = await fakeServe("<html><body>no overlay here</body></html>");
+  try {
+    await assert.rejects(resolveDoc(`${origin}/`), /could not discover the local project/);
+  } finally {
+    server.close();
+  }
+});
+
+test("shareDoc on a serve root: local project state, plain root URL on the card", async () => {
+  const { server, origin } = await fakeServe(
+    '<html><head><title>Sandbox Doc</title></head><body><script src="/api/local/board-audit/client.js"></script></body></html>',
+  );
+  const stateDir = tmpDir();
+  const slack = fakeSlack();
+  slack.createChannel = async (name) => ({ channelId: "CLOCAL", name });
+  slack.setTopic = async () => ({ ok: true });
+  try {
+    const result = await shareDoc({
+      docUrl: `${origin}/?persona=jb`,
+      test: true,
+      stateDir,
+      probeDelays: [],
+      slack,
+      log: () => {},
+    });
+    assert.equal(result.channelName, "markd-test-local-board-audit");
+    const state = stateStore.load(stateDir, result.channelName);
+    assert.equal(state.user, "local");
+    assert.equal(state.project, "board-audit");
+    assert.equal(state.docUrl, `${origin}/`, "persisted URL is the plain root");
+    const card = slack.sends.find((s) => s.text.includes("[md:share]"));
+    assert.ok(card.text.includes(`${origin}/`));
+    assert.ok(!card.text.includes("persona"), "card carries no persona param");
+    assert.ok(card.text.includes("Sandbox Doc"));
+  } finally {
+    server.close();
+  }
 });
 
 // ---------------------------------------------------------------------------

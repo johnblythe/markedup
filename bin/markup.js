@@ -401,9 +401,9 @@ program
   .action(async (url, opts) => {
     const { startBridge } = require("../src/slackops/bridge");
     const { channelNameFor } = require("../src/slackops/share");
-    const { parseDocUrl } = require("../src/slackops/api-client");
+    const { resolveDoc } = require("../src/slackops/api-client");
     try {
-      const { user, project } = parseDocUrl(url);
+      const { user, project, docUrl } = await resolveDoc(url);
       const channelName = channelNameFor({
         user,
         project,
@@ -411,7 +411,7 @@ program
         channelOverride: opts.channel,
       });
       const result = await startBridge({
-        docUrl: url,
+        docUrl,
         channelName,
         stateDir: opts.stateDir,
         intervalMs: opts.interval ? parseInt(opts.interval, 10) * 1000 : undefined,
