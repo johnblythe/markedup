@@ -1219,3 +1219,45 @@ mark.markup-span.markup-authored-other {
 #markup-toolbar button.markup-strip-palette-btn:hover {
   color: var(--markup-text);
 }
+
+/* Collapsed mode control: one button showing the current mode, expanding to a
+   picker — mirrors the export icon's anchored popup and its docked flip. */
+#markup-toolbar .markup-strip-mode {
+  position: relative;
+}
+
+#markup-toolbar button.markup-strip-mode-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+#markup-toolbar .markup-mode-menu {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  width: max-content;
+  background: var(--markup-bg);
+  border: 1px solid var(--markup-border);
+  border-radius: 6px;
+  box-shadow: var(--markup-shadow);
+  z-index: 5;
+}
+
+#markup-toolbar .markup-mode-menu.markup-mode-menu-open {
+  display: flex;
+}
+
+#markup-toolbar .markup-mode-menu button.markup-strip-seg {
+  text-align: left;
+  width: 100%;
+}
+
+#markup-toolbar.markup-toolbar-docked .markup-mode-menu {
+  bottom: auto;
+  top: calc(100% + 6px);
+}

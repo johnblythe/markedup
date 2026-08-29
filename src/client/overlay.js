@@ -164,23 +164,38 @@
     var row = document.createElement("div");
     row.className = "markup-strip-row";
 
-    var segments = document.createElement("div");
-    segments.className = "markup-strip-segments";
-    segments.appendChild(
-      makeButton({ text: "Text", title: "Highlight text (T)", mode: "span", className: "markup-strip-seg" }),
+    // Mode: one control that shows the current mode and expands to pick, the
+    // way the export icon does — the three modes don't all need to sit out at
+    // once. T / P / R and ⌘K still switch mode without opening this.
+    var modeWrap = document.createElement("div");
+    modeWrap.className = "markup-strip-mode markup-toolbar-row-anchor";
+    var modeBtn = makeButton({
+      action: "mode-more",
+      title: "Choose annotation mode (T / P / R)",
+      className: "markup-strip-mode-btn",
+    });
+    modeBtn.setAttribute("data-mode-label", "");
+    modeBtn.textContent = "Annotate ▾";
+    modeWrap.appendChild(modeBtn);
+    var modeMenu = document.createElement("div");
+    modeMenu.className = "markup-mode-menu";
+    modeMenu.setAttribute("data-mode-menu", "");
+    modeMenu.appendChild(
+      makeButton({ text: "Text · T", title: "Highlight text", mode: "span", className: "markup-strip-seg" }),
     );
-    segments.appendChild(
-      makeButton({ text: "Pin", title: "Pin an element (P)", mode: "pin", className: "markup-strip-seg" }),
+    modeMenu.appendChild(
+      makeButton({ text: "Pin · P", title: "Pin an element", mode: "pin", className: "markup-strip-seg" }),
     );
-    segments.appendChild(
+    modeMenu.appendChild(
       makeButton({
-        text: "Rect",
-        title: "Draw a rectangle (R, or shift-drag anywhere)",
+        text: "Rect · R",
+        title: "Draw a rectangle (or shift-drag anywhere)",
         mode: "rect",
         className: "markup-strip-seg",
       }),
     );
-    row.appendChild(segments);
+    modeWrap.appendChild(modeMenu);
+    row.appendChild(modeWrap);
 
     // Export: one icon expands to every export path.
     var exportWrap = document.createElement("div");
@@ -299,11 +314,18 @@
       }
     }
 
+    var MODE_NAMES = { span: "Text", pin: "Pin", rect: "Rect" };
     function setActiveMode(mode) {
       Modes.setActive(mode);
       modeButtons.forEach(function (b) {
         b.classList.toggle("markup-mode-active", b.getAttribute("data-mode") === mode);
       });
+      // The collapsed control shows the current mode (a dot marks it active).
+      var modeLabel = toolbar.querySelector("[data-mode-label]");
+      if (modeLabel) {
+        modeLabel.textContent = (mode ? "● " + MODE_NAMES[mode] : "Annotate") + " ▾";
+        modeLabel.classList.toggle("markup-mode-active", !!mode);
+      }
     }
 
     modeButtons.forEach(function (b) {
@@ -311,6 +333,8 @@
         var current = Modes.getActive();
         var next = b.getAttribute("data-mode");
         setActiveMode(current === next ? null : next);
+        var mm = toolbar.querySelector("[data-mode-menu]");
+        if (mm) mm.classList.remove("markup-mode-menu-open");
       });
     });
 
@@ -339,12 +363,16 @@
       if (badgePanel) badgePanel.classList.remove("markup-badge-panel-open");
       var menu = toolbar.querySelector("[data-export-menu]");
       if (menu) menu.classList.remove("markup-export-menu-open");
+      var modeMenuC = toolbar.querySelector("[data-mode-menu]");
+      if (modeMenuC) modeMenuC.classList.remove("markup-mode-menu-open");
     }
     function anyFloatingPopupOpen() {
       var menu = toolbar.querySelector("[data-export-menu]");
+      var modeMenuA = toolbar.querySelector("[data-mode-menu]");
       return (
         (badgePanel && badgePanel.classList.contains("markup-badge-panel-open")) ||
-        (menu && menu.classList.contains("markup-export-menu-open"))
+        (menu && menu.classList.contains("markup-export-menu-open")) ||
+        (modeMenuA && modeMenuA.classList.contains("markup-mode-menu-open"))
       );
     }
     function closePaletteIfOpen() {
@@ -460,6 +488,25 @@
       if (pullBtn) {
         pullBtn.addEventListener("click", copyPullCommand);
       }
+    }
+
+    // Mode menu: the collapsed mode control toggles it; picking a mode (handled
+    // above) or clicking anywhere else closes it. Same mutual-exclusivity as
+    // the export menu — opening it closes the palette, popover, and other popups.
+    var modeMoreBtn = toolbar.querySelector('[data-action="mode-more"]');
+    var modeMenuEl = toolbar.querySelector("[data-mode-menu]");
+    if (modeMoreBtn && modeMenuEl) {
+      modeMoreBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var willOpen = !modeMenuEl.classList.contains("markup-mode-menu-open");
+        closeFloatingPopups();
+        closePaletteIfOpen();
+        if (Popover.isVisible()) Popover.hide();
+        if (willOpen) modeMenuEl.classList.add("markup-mode-menu-open");
+      });
+      document.addEventListener("click", function () {
+        modeMenuEl.classList.remove("markup-mode-menu-open");
+      });
     }
 
     // The badge's "N new" pill starts a guided pass: open the drawer and jump
