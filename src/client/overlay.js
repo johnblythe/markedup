@@ -435,9 +435,20 @@
     updateDrawerButton();
 
     function clearAllAnnotations() {
+      var all = Persist.loadAnnotations(sourceKey);
+      var mineCount = Persist.isRemote()
+        ? all.filter(function (a) {
+            return !a.author || a.author === Persist.self();
+          }).length
+        : all.length;
+      if (mineCount === 0) {
+        Toast.show("No annotations of yours to clear.");
+        return;
+      }
+      var noun = mineCount === 1 ? "annotation" : "annotations";
       var prompt = Persist.isRemote()
-        ? "Delete all YOUR annotations on this artifact? (Other reviewers' notes stay.)"
-        : "Delete all annotations for this artifact?";
+        ? "Delete your " + mineCount + " " + noun + "? Other reviewers' notes stay. This can't be undone."
+        : "Delete all " + mineCount + " " + noun + "? This can't be undone.";
       if (!confirm(prompt)) return;
       document.querySelectorAll(".markup-pin, .markup-rect").forEach(function (n) {
         n.remove();

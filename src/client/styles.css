@@ -1228,7 +1228,7 @@ mark.markup-span.markup-authored-other {
 
 #markup-toolbar button.markup-strip-mode-btn {
   font-size: 11px;
-  padding: 4px 10px;
+  padding: 6px 10px;
   white-space: nowrap;
 }
 
@@ -1260,4 +1260,23 @@ mark.markup-span.markup-authored-other {
 #markup-toolbar.markup-toolbar-docked .markup-mode-menu {
   bottom: auto;
   top: calc(100% + 6px);
+}
+
+/* Every control in the strip lines up to one height and centers its content,
+   so different font sizes (mode 11px, export icon 13px, palette 10.5px) don't
+   read as ragged button heights. The mode/export wrappers become flex so their
+   inner button fills the row height. */
+#markup-toolbar .markup-strip-mode,
+#markup-toolbar .markup-strip-export {
+  display: flex;
+}
+#markup-toolbar .markup-strip-row > *,
+#markup-toolbar .markup-strip-mode > button,
+#markup-toolbar .markup-strip-export > button {
+  min-height: 30px;
+}
+#markup-toolbar .markup-strip-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }

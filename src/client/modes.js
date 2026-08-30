@@ -80,6 +80,7 @@ var Modes = (function () {
     var changed = false;
 
     list.forEach(function (anno) {
+      try {
       var status = anno.status || "open";
 
       if (status === "accepted") {
@@ -121,6 +122,14 @@ var Modes = (function () {
         }
       } else {
         open.push(anno);
+      }
+      } catch (err) {
+        // One annotation must never abort the whole render — that would leave
+        // the drawer stale and the note invisible. Keep it visible in Open.
+        if (typeof console !== "undefined") {
+          console.warn("[markup] render skipped for", anno && anno.id, err);
+        }
+        if (open.indexOf(anno) === -1) open.push(anno);
       }
     });
 
