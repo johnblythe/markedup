@@ -10,6 +10,10 @@
   --markup-text: #222;
   --markup-muted: #777;
   --markup-border: #ddd;
+  --markup-hairline: #ececec;
+  --markup-warn: #9a6700;
+  --markup-danger: #c0392b;
+  --markup-hover: #fafafa;
   --markup-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
 }
 
@@ -390,7 +394,6 @@ mark.markup-strike,
 .markup-sidebar-list {
   overflow-y: auto;
   flex: 1;
-  padding: 8px;
 }
 .markup-sidebar-empty {
   text-align: center;
@@ -398,31 +401,30 @@ mark.markup-strike,
   padding: 32px 16px;
   font-size: 12px;
 }
+/* Entries are flat rows split by hairlines, not floating cards: less chrome
+ * per note, so the note text is the loudest thing in the drawer. */
 .markup-sidebar-entry {
-  background: #fff;
-  border: 1px solid var(--markup-border);
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--markup-hairline);
+  transition: background 120ms ease;
+}
+.markup-sidebar-entry:hover {
+  background: var(--markup-hover);
 }
 .markup-sidebar-entry-accepted {
-  opacity: 0.7;
-  background: #f8f6f0;
+  opacity: 0.65;
 }
 
 /* Bulk action row at the top of each section's body */
 .markup-sidebar-bulk {
   display: flex;
-  gap: 6px;
-  padding: 4px 4px 8px 4px;
-  margin-bottom: 4px;
-  border-bottom: 1px dashed var(--markup-border);
-  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: flex-end;
+  padding: 6px 14px 2px;
 }
 .markup-sidebar-bulk .markup-sidebar-btn {
-  flex: 1;
   font-size: 10.5px;
-  padding: 4px 6px;
+  padding: 2px 7px;
   white-space: nowrap;
 }
 
@@ -477,25 +479,11 @@ mark.markup-strike,
   color: #fff;
 }
 .markup-sidebar-section-body {
-  padding: 0 8px 8px 8px;
+  padding: 0 0 8px;
 }
 .markup-sidebar-section-collapsed .markup-sidebar-section-body {
   display: none;
 }
-
-/* Status badges */
-.markup-sidebar-status {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 2px 5px;
-  border-radius: 3px;
-  background: var(--markup-border);
-  color: var(--markup-text);
-}
-.markup-sidebar-status-pending { background: var(--markup-accent); color: #fff; }
-.markup-sidebar-status-open { background: #2e7d32; color: #fff; }
-.markup-sidebar-status-accepted { background: #888; color: #fff; }
 
 /* Banner */
 .markup-sidebar-banner {
@@ -533,57 +521,85 @@ mark.markup-strike,
   margin-bottom: 6px;
   flex-wrap: wrap;
 }
-.markup-sidebar-mode {
-  font-size: 9px;
+.markup-sidebar-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 2px 6px;
-  border-radius: 3px;
-  color: #fff;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  flex: none;
 }
-.markup-sidebar-mode-span {
-  background: #b07a1a;
+.markup-sidebar-name {
+  font-size: 12px;
+  font-weight: 600;
 }
-.markup-sidebar-mode-highlight {
-  background: #a89100;
+.markup-sidebar-new-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--markup-accent-light);
+  flex: none;
 }
-.markup-sidebar-mode-strike {
-  background: #c0392b;
+.markup-sidebar-when {
+  font-size: 10.5px;
+  color: var(--markup-muted);
 }
-.markup-sidebar-mode-pin {
-  background: var(--markup-accent);
+.markup-sidebar-top-spacer {
+  flex: 1;
 }
-.markup-sidebar-mode-rect {
-  background: #6b4f1a;
-}
-.markup-sidebar-pin-num {
+.markup-sidebar-why {
   font-size: 10px;
+  font-weight: 600;
+  color: var(--markup-warn);
+  white-space: nowrap;
+}
+.markup-sidebar-kind {
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--markup-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-.markup-sidebar-when {
-  margin-left: auto;
-  font-size: 10px;
-  color: var(--markup-muted);
-}
 .markup-sidebar-note {
   font-size: 13px;
-  line-height: 1.4;
-  margin-bottom: 8px;
+  line-height: 1.45;
+  margin-bottom: 6px;
   white-space: pre-wrap;
+  word-break: break-word;
 }
-.markup-sidebar-context {
-  margin-bottom: 8px;
+/* The quote/thumb is a button (it jumps to the spot in the doc): reset the
+ * button chrome, then draw it as quoted context. */
+.markup-sidebar-ctx {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0 0 6px;
+  cursor: pointer;
+  font-family: inherit;
 }
 .markup-sidebar-quote {
-  font-style: italic;
+  font-size: 11.5px;
+  line-height: 1.35;
   color: var(--markup-muted);
-  font-size: 12px;
   border-left: 2px solid var(--markup-border);
-  padding-left: 8px;
-  background: #fafafa;
-  padding: 4px 8px;
-  border-radius: 3px;
+  padding: 1px 0 1px 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.markup-sidebar-quote:hover {
+  color: var(--markup-text);
+  border-left-color: var(--markup-accent);
 }
 .markup-sidebar-thumb {
   max-width: 100%;
@@ -593,33 +609,47 @@ mark.markup-strike,
 }
 .markup-sidebar-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
+  align-items: center;
   flex-wrap: wrap;
 }
+/* Actions are quiet chips so the note text stays the loudest thing on the
+ * card: Resolve alone carries the accent tint, Remove sits apart on the
+ * right in the danger color. */
 .markup-sidebar-btn {
   cursor: pointer;
-  padding: 4px 9px;
+  padding: 3px 8px;
   font-size: 11px;
   font-family: inherit;
-  background: #f5f5f5;
-  color: var(--markup-text);
-  border: 1px solid var(--markup-border);
-  border-radius: 4px;
+  background: transparent;
+  color: var(--markup-muted);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  transition: background 120ms ease, color 120ms ease;
 }
 .markup-sidebar-btn:hover {
-  background: #eaeaea;
+  background: #efefef;
+  color: var(--markup-text);
 }
 .markup-sidebar-btn-primary {
-  background: var(--markup-accent);
-  color: #fff;
-  border-color: var(--markup-accent);
+  background: rgba(211, 84, 0, 0.09);
+  color: var(--markup-accent);
+  font-weight: 600;
 }
 .markup-sidebar-btn-primary:hover {
-  filter: brightness(0.92);
-  background: var(--markup-accent);
+  background: rgba(211, 84, 0, 0.16);
+  color: var(--markup-accent);
 }
 .markup-sidebar-btn-danger {
-  color: #c0392b;
+  margin-left: auto;
+  color: rgba(192, 57, 43, 0.75);
+}
+.markup-sidebar-btn-danger:hover {
+  background: rgba(192, 57, 43, 0.08);
+  color: var(--markup-danger);
+}
+.markup-sidebar-bulk .markup-sidebar-btn-danger {
+  margin-left: 0;
 }
 
 #markup-toolbar button.markup-detached-has {
@@ -773,43 +803,33 @@ mark.markup-span.markup-authored-other {
   font-size: 14px;
 }
 
-.markup-sidebar-author {
-  font-size: 10px;
-  font-weight: 600;
-  color: #7048b6;
-  margin: 2px 0 0;
-}
-
-.markup-sidebar-thread {
-  margin-top: 4px;
-  padding: 4px 6px;
-  background: #f5f5f5;
-  border-radius: 4px;
-}
-
-.markup-sidebar-reply {
-  font-size: 10.5px;
-  color: var(--markup-text);
-  line-height: 1.5;
-}
-
 /* --- Reply threads + composer ------------------------------------------ */
 
+/* A thin left rule marks the thread, Linear-comment style; replies are
+ * plain lines, not boxes inside the card. */
 .markup-sidebar-thread {
-  margin-top: 6px;
+  margin: 2px 0 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--markup-hairline);
+}
+
+.markup-sidebar-thread:empty {
+  display: none;
+}
+
+/* Until a reply exists, the thread is just the Reply affordance — no rule. */
+.markup-sidebar-thread:not(:has(.markup-sidebar-reply)) {
+  border-left: 0;
+  padding-left: 0;
 }
 
 .markup-sidebar-reply {
-  padding: 4px 6px;
-  margin: 0 0 4px;
-  background: #f5f5f5;
-  border-radius: 4px;
+  padding: 3px 0;
 }
 
 .markup-sidebar-reply-author {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  color: #7048b6;
 }
 
 .markup-sidebar-reply-when {
@@ -819,7 +839,7 @@ mark.markup-span.markup-authored-other {
 }
 
 .markup-sidebar-reply-text {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--markup-text);
   line-height: 1.45;
   margin-top: 1px;
@@ -828,18 +848,16 @@ mark.markup-span.markup-authored-other {
 }
 
 .markup-sidebar-reply-btn {
-  font-size: 10px;
-  padding: 2px 8px;
-  background: #f5f5f5;
-  border: 1px solid var(--markup-border);
-  border-radius: 4px;
+  font-size: 10.5px;
+  padding: 2px 0;
+  background: transparent;
+  border: 0;
   color: var(--markup-muted);
   cursor: pointer;
 }
 
 .markup-sidebar-reply-btn:hover {
-  color: var(--markup-text);
-  border-color: var(--markup-accent-light);
+  color: var(--markup-accent);
 }
 
 .markup-sidebar-compose textarea {
@@ -879,13 +897,16 @@ mark.markup-span.markup-authored-other {
 
 /* --- Guided review walk -------------------------------------------------- */
 
+/* Unread marker is the header dot (markup-sidebar-new-dot) plus a faint
+ * wash, matching flat rows. */
 .markup-sidebar-entry-new {
-  border-left: 3px solid var(--markup-accent-light);
+  background: #fffcf4;
 }
 
+/* Keyboard walk focus: inset accent rail instead of an outline box. */
 .markup-sidebar-entry-focus {
-  outline: 2px solid var(--markup-accent);
-  outline-offset: 1px;
+  box-shadow: inset 2px 0 0 var(--markup-accent);
+  background: var(--markup-hover);
 }
 
 #markup-toolbar .markup-badge-new {
@@ -1151,6 +1172,7 @@ mark.markup-span.markup-authored-other {
  * treatments live here. */
 
 #markup-toolbar .markup-strip-row {
+  --markup-strip-h: 28px;
   display: flex;
   align-items: stretch;
   gap: 4px;
@@ -1175,23 +1197,37 @@ mark.markup-span.markup-authored-other {
   border-right: 0;
 }
 
+/* The mode/export buttons sit inside anchored wrappers, so the row's
+ * align-items: stretch never reaches them unless the wrappers pass it on. */
+#markup-toolbar .markup-strip-mode,
 #markup-toolbar .markup-strip-export {
   flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+}
+
+/* Strip controls all take exactly --markup-strip-h: mixed font sizes with
+ * vertical padding is what kept their heights ragged. */
+#markup-toolbar button.markup-strip-mode-btn,
+#markup-toolbar button.markup-strip-icon-btn {
+  box-sizing: border-box;
+  height: var(--markup-strip-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 #markup-toolbar button.markup-strip-icon-btn {
   flex: 0 0 auto;
   width: 30px;
-  padding: 6px 0;
+  padding: 0;
   font-size: 13px;
 }
 
 #markup-toolbar button.markup-strip-drawer-btn {
   width: auto;
-  display: flex;
-  align-items: center;
   gap: 5px;
-  padding: 6px 9px;
+  padding: 0 9px;
 }
 
 #markup-toolbar .markup-strip-drawer-label {
@@ -1210,7 +1246,7 @@ mark.markup-span.markup-authored-other {
 
 #markup-toolbar button.markup-strip-palette-btn {
   width: auto;
-  padding: 6px 8px;
+  padding: 0 8px;
   font-size: 10.5px;
   letter-spacing: 0.02em;
   color: var(--markup-muted);
@@ -1228,7 +1264,7 @@ mark.markup-span.markup-authored-other {
 
 #markup-toolbar button.markup-strip-mode-btn {
   font-size: 11px;
-  padding: 6px 10px;
+  padding: 0 10px;
   white-space: nowrap;
 }
 

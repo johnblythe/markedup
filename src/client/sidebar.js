@@ -37,6 +37,29 @@ var Sidebar = (function () {
     return String(email || "?").split("@")[0];
   }
 
+  // Deterministic identity hue per author, Drive-style: same reviewer, same
+  // color, everywhere. The wheel skips orange/red so identity never collides
+  // with the product accent or the danger color.
+  var AUTHOR_HUES = [212, 262, 174, 330, 140, 232];
+  function authorHue(author) {
+    var s = String(author || "?");
+    var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return AUTHOR_HUES[h % AUTHOR_HUES.length];
+  }
+  function authorColor(author) {
+    return "hsl(" + authorHue(author) + ", 45%, 38%)";
+  }
+  function avatarEl(author) {
+    var el = document.createElement("span");
+    el.className = "markup-sidebar-avatar";
+    el.textContent = shortName(author).slice(0, 2);
+    el.style.background = "hsl(" + authorHue(author) + ", 55%, 91%)";
+    el.style.color = authorColor(author);
+    el.setAttribute("title", author || "");
+    return el;
+  }
+
   function ensureBuilt() {
     if (panelEl) return panelEl;
 
@@ -82,29 +105,36 @@ var Sidebar = (function () {
     return panelEl;
   }
 
-  function modeBadge(mode) {
+  // Lifecycle state is carried by the section an entry sits in, so the card
+  // itself only whispers the annotation kind (and its pin/rect number).
+  function kindToken(anno) {
     var span = document.createElement("span");
-    span.className = "markup-sidebar-mode markup-sidebar-mode-" + mode;
-    span.textContent =
-      mode === "span"
-        ? "TEXT"
-        : mode === "highlight"
-          ? "HIGHLIGHT"
-          : mode === "strike"
-            ? "STRIKE"
-            : mode === "pin"
-              ? "PIN"
-              : "RECT";
-    return span;
-  }
-
-  function statusBadge(anno, status) {
-    var span = document.createElement("span");
-    // Class keeps the raw lifecycle value; the visible text is the human label.
-    span.className = "markup-sidebar-status markup-sidebar-status-" + status;
-    span.textContent = Persist.displayStatus
-      ? Persist.displayStatus(anno)
-      : status.toUpperCase();
+    span.className = "markup-sidebar-kind";
+    var label =
+      anno.mode === "span"
+        ? "text"
+        : anno.mode === "highlight"
+          ? "highlight"
+          : anno.mode === "strike"
+            ? "strike"
+            : anno.mode === "pin"
+              ? "pin"
+              : "rect";
+    if (anno.mode === "pin" && anno.pinNum) label += " " + anno.pinNum;
+    if (anno.mode === "rect" && anno.rectNum) label += " " + anno.rectNum;
+    span.textContent = label;
+    span.setAttribute(
+      "title",
+      anno.mode === "span"
+        ? "Text selection"
+        : anno.mode === "highlight"
+          ? "Highlighted text"
+          : anno.mode === "strike"
+            ? "Struck-through text"
+            : anno.mode === "pin"
+              ? "Pinned element"
+              : "Rectangle",
+    );
     return span;
   }
 
@@ -130,6 +160,7 @@ var Sidebar = (function () {
         var who = document.createElement("span");
         who.className = "markup-sidebar-reply-author";
         who.textContent = shortName(r.author);
+        who.style.color = authorColor(r.author);
         who.setAttribute("title", r.author || "");
         line.appendChild(who);
 
@@ -254,57 +285,68 @@ var Sidebar = (function () {
     entry.setAttribute("data-anno-id", anno.id);
     if (sessionNewIds[anno.id]) entry.classList.add("markup-sidebar-entry-new");
 
+    // Header: who + when, then (pending only) why it needs a look, then the
+    // kind token. Lifecycle chips are gone — the section already says status.
     var top = document.createElement("div");
     top.className = "markup-sidebar-entry-top";
-    top.appendChild(modeBadge(anno.mode));
-    top.appendChild(statusBadge(anno, status));
-    if (anno.mode === "pin" && anno.pinNum) {
-      var n = document.createElement("span");
-      n.className = "markup-sidebar-pin-num";
-      n.textContent = "#" + anno.pinNum;
-      top.appendChild(n);
-    }
-    if (anno.mode === "rect" && anno.rectNum) {
-      var n2 = document.createElement("span");
-      n2.className = "markup-sidebar-pin-num";
-      n2.textContent = "rect-" + anno.rectNum;
-      top.appendChild(n2);
+    top.appendChild(avatarEl(anno.author));
+    var name = document.createElement("span");
+    name.className = "markup-sidebar-name";
+    name.textContent = shortName(anno.author);
+    name.style.color = authorColor(anno.author);
+    name.setAttribute("title", anno.author || "");
+    top.appendChild(name);
+    if (sessionNewIds[anno.id]) {
+      var dot = document.createElement("span");
+      dot.className = "markup-sidebar-new-dot";
+      dot.setAttribute("title", "New since you last looked");
+      top.appendChild(dot);
     }
     var when = document.createElement("span");
     when.className = "markup-sidebar-when";
     try {
-      when.textContent = new Date(anno.createdAt).toLocaleTimeString();
+      when.textContent = relTime(anno.createdAt);
+      when.setAttribute("title", new Date(anno.createdAt).toLocaleString());
     } catch (_e) {
       when.textContent = "";
     }
     top.appendChild(when);
+    var spacer = document.createElement("span");
+    spacer.className = "markup-sidebar-top-spacer";
+    top.appendChild(spacer);
+    if (status === "pending") {
+      var why = document.createElement("span");
+      why.className = "markup-sidebar-why";
+      why.textContent = Persist.displayStatus ? Persist.displayStatus(anno) : "Needs another look";
+      top.appendChild(why);
+    }
+    top.appendChild(kindToken(anno));
     entry.appendChild(top);
 
-    // Shared canvas: say whose note this is.
-    if (anno.author) {
-      var byline = document.createElement("div");
-      byline.className = "markup-sidebar-author";
-      byline.textContent = shortName(anno.author);
-      byline.setAttribute("title", anno.author);
-      entry.appendChild(byline);
+    // The anchor context is the jump affordance: clicking the quote (or the
+    // rect thumbnail) goes to the spot, replacing the Where-it-is/was buttons.
+    function jump() {
+      if (status === "open") {
+        if (handlers.onScrollToInline) handlers.onScrollToInline(anno);
+      } else if (handlers.onShowContext) {
+        handlers.onShowContext(anno);
+      }
     }
-
-    var note = document.createElement("div");
-    note.className = "markup-sidebar-note";
-    note.textContent = anno.note || "(no note)";
-    entry.appendChild(note);
-
-    entry.appendChild(buildThread(anno));
-
-    var ctx = document.createElement("div");
-    ctx.className = "markup-sidebar-context";
+    var jumpTitle = status === "open" ? "Jump to it in the doc" : "Show where it was";
+    var hasCtx = false;
     if (anno.mode === "rect" && ((anno.payload && anno.payload.pngDataURL) || anno.shotUrl)) {
+      var thumbBtn = document.createElement("button");
+      thumbBtn.className = "markup-sidebar-ctx";
+      thumbBtn.setAttribute("title", jumpTitle);
       var img = document.createElement("img");
       img.className = "markup-sidebar-thumb";
       // Local data URL when this browser took the shot; shotUrl for everyone else.
       img.src = (anno.payload && anno.payload.pngDataURL) || anno.shotUrl;
       img.alt = "rect screenshot";
-      ctx.appendChild(img);
+      thumbBtn.appendChild(img);
+      thumbBtn.addEventListener("click", jump);
+      entry.appendChild(thumbBtn);
+      hasCtx = true;
     } else {
       // For a span, quote the reviewer's actual selection (payload.anchorText);
       // anchor.anchorText is the whole parent element's text, which is
@@ -316,13 +358,22 @@ var Sidebar = (function () {
       var elText = anno.anchor && anno.anchor.anchorText;
       var anchorText = (span ? selText || elText : elText || selText) || "";
       if (anchorText) {
-        var quote = document.createElement("div");
-        quote.className = "markup-sidebar-quote";
-        quote.textContent = '"' + anchorText.slice(0, 140) + '"';
-        ctx.appendChild(quote);
+        var quoteBtn = document.createElement("button");
+        quoteBtn.className = "markup-sidebar-ctx markup-sidebar-quote";
+        quoteBtn.setAttribute("title", jumpTitle);
+        quoteBtn.textContent = anchorText.slice(0, 140);
+        quoteBtn.addEventListener("click", jump);
+        entry.appendChild(quoteBtn);
+        hasCtx = true;
       }
     }
-    entry.appendChild(ctx);
+
+    var note = document.createElement("div");
+    note.className = "markup-sidebar-note";
+    note.textContent = anno.note || "(no note)";
+    entry.appendChild(note);
+
+    entry.appendChild(buildThread(anno));
 
     var actions = document.createElement("div");
     actions.className = "markup-sidebar-actions";
@@ -339,12 +390,12 @@ var Sidebar = (function () {
       });
     }
 
+    // An entry with no quotable context keeps a jump button so the spot is
+    // still reachable.
+    if (!hasCtx) {
+      actions.appendChild(makeBtn(status === "open" ? "Where it is" : "Where it was", "", jump));
+    }
     if (status === "pending") {
-      actions.appendChild(
-        makeBtn("Where it was", "", function () {
-          if (handlers.onShowContext) handlers.onShowContext(anno);
-        }),
-      );
       if (owns) {
         actions.appendChild(
           makeBtn("Re-attach", "", function () {
@@ -360,22 +411,12 @@ var Sidebar = (function () {
       if (owns) actions.appendChild(removeBtn());
     } else if (status === "open") {
       actions.appendChild(
-        makeBtn("Where it is", "", function () {
-          if (handlers.onScrollToInline) handlers.onScrollToInline(anno);
-        }),
-      );
-      actions.appendChild(
         makeBtn("Resolve", "markup-sidebar-btn-primary", function () {
           if (handlers.onAccept) handlers.onAccept(anno);
         }),
       );
       if (owns) actions.appendChild(removeBtn());
     } else if (status === "accepted") {
-      actions.appendChild(
-        makeBtn("Where it was", "", function () {
-          if (handlers.onShowContext) handlers.onShowContext(anno);
-        }),
-      );
       actions.appendChild(
         makeBtn("Re-open", "", function () {
           if (handlers.onReopen) handlers.onReopen(anno);

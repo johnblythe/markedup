@@ -7,6 +7,29 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Changed
+
+- Review drawer redesigned for at-a-glance triage: flat hairline-divided rows
+  instead of bordered cards; author avatar + name in a deterministic
+  per-author color with a relative timestamp; the anchored quote sits above
+  the note and is the jump affordance (click it to go to the spot), replacing
+  the "Where it is/was" buttons; lifecycle chips removed (the section already
+  says the status; pending rows still say why, e.g. "Moved — re-attach");
+  actions are quiet chips with Resolve alone tinted and Remove set apart on
+  the right; reply threads render as plain lines behind a thin rule.
+- Strip controls share one explicit height; sizing no longer drifts with each
+  control's font size and padding.
+
+### Fixed
+
+- A text selection crossing an element boundary (bold run, link, line wrap)
+  now survives reload: re-hydration searches the anchor element's combined
+  text (with a whitespace-insensitive fallback) instead of one text node at a
+  time, so the highlight re-renders instead of vanishing.
+- Jumping to a note's spot works: smooth `window.scrollTo` is silently inert
+  on some wrapped docs, so jumps scroll instantly (with the ghost flash
+  marking the landing).
+
 ### Added
 
 - Two-persona local sandbox: `markup serve <file> --multiplayer` prints two
