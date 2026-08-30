@@ -29,6 +29,10 @@ function insertAt(html, insertion, snippet) {
   return html.slice(0, insertion.index) + snippet + html.slice(insertion.index);
 }
 
+function escapeHTML(str) {
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // `opts` may contain:
 //   key:        absolute source path, exposed as window.__MARKUP_KEY__
 //   sourceName: basename, exposed as window.__MARKUP_SOURCE_NAME__
@@ -42,6 +46,20 @@ function wrapHTML(rawHTML, opts = {}) {
   const key = opts.key || "";
   const sourceName = opts.sourceName || "";
   const styles = opts.styles || "";
+
+  let result = rawHTML;
+
+  // Tag the tab title with "markedup" so a served artifact is findable via
+  // Chrome's tab search (Cmd+Shift+A) instead of hunting for its port
+  // number. Append to an existing <title> so the artifact's own title stays
+  // visible; fall back to a fresh one if the source has none.
+  const titleInsertion = findInsertion(result, "title");
+  if (titleInsertion) {
+    result = insertAt(result, titleInsertion, " — markedup");
+  } else {
+    const label = sourceName ? `markedup — ${sourceName}` : "markedup";
+    result = insertAt(result, findInsertion(result, "head"), `<title>${escapeHTML(label)}</title>\n`);
+  }
 
   // Style block goes near the top of <head> (or prepended to the doc).
   const styleBlock =
@@ -59,8 +77,8 @@ function wrapHTML(rawHTML, opts = {}) {
     `<script src="/__markup/modern-screenshot.js"></script>\n` +
     `<script src="/__markup/client.js"></script>\n`;
 
-  const headInsertion = findInsertion(rawHTML, "head");
-  let result = rawHTML;
+  // Recompute the head insertion point against the (possibly title-mutated) result.
+  const headInsertion = findInsertion(result, "head");
   if (headInsertion) {
     result = insertAt(result, headInsertion, styleBlock);
   } else {
