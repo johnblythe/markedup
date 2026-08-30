@@ -145,6 +145,27 @@ program
   });
 
 program
+  .command("login")
+  .description("Sign in to the shared canvas with your own SSO (no service token needed)")
+  .action(() => {
+    try {
+      const Access = require("../src/access");
+      const { loadConfig } = require("../src/publish");
+      const config = loadConfig();
+      if (config.clientId && config.clientSecret) {
+        console.log("markup: a service token is configured — publish/pull already use it, no login needed");
+        return;
+      }
+      Access.login(config.url);
+      console.log(`markup: signed in to ${config.url}`);
+      console.log("markup: publish and pull now run as you; re-run this when the session expires");
+    } catch (err) {
+      console.error(`markup: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
   .command("pull <url>")
   .description("Fetch shared-canvas annotations and write the feedback bundle (md + PNGs)")
   .option("--dir <dir>", "directory to write the bundle into (default: cwd)")

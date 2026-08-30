@@ -7,18 +7,22 @@
 //   bundle (markdown + PNGs) next to wherever you run it — the same bundle
 //   the local "Export to disk" produces, so agents consume it unchanged.
 //
-// Auth: Cloudflare Access service token. Config resolves from the
-// environment first, then LDPUB_ENV_FILE, then ~/code/ldpub/.env.
+// Auth, in order:
+//   1. Cloudflare Access service token (agents/CI) — LDPUB_CLIENT_ID/SECRET
+//      from the environment, then LDPUB_ENV_FILE, then ~/code/ldpub/.env.
+//   2. The caller's own Access SSO session via cloudflared (`markup login`) —
+//      no minted credentials, attribution is their real email.
 // Values are consumed, never printed.
 
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const Access = require("./access");
 const { buildClientBundle, getStylesCSS } = require("./client-bundle");
 const { buildFeedbackMarkdown } = require("./feedback");
 const { writeExportBundle, timestamp } = require("./export");
 
-const REQUIRED_KEYS = ["LDPUB_URL", "LDPUB_CLIENT_ID", "LDPUB_CLIENT_SECRET"];
+const DEFAULT_LDPUB_URL = "https://ldpub.jblythe.workers.dev";
 const DEFAULT_ENV_FILE = path.join(os.homedir(), "code", "ldpub", ".env");
 
 function parseEnvFile(envPath) {
@@ -35,19 +39,36 @@ function parseEnvFile(envPath) {
 function loadConfig() {
   const fileEnv = parseEnvFile(process.env.LDPUB_ENV_FILE || DEFAULT_ENV_FILE);
   const get = (key) => process.env[key] || fileEnv[key] || "";
-  const missing = REQUIRED_KEYS.filter((key) => !get(key));
-  if (missing.length) {
-    throw new Error(
-      `missing ldpub config: ${missing.join(", ")} — set them in the environment ` +
-        `or point LDPUB_ENV_FILE at a .env that has them (default: ${DEFAULT_ENV_FILE})`,
-    );
-  }
   return {
-    url: get("LDPUB_URL").replace(/\/+$/, ""),
+    url: (get("LDPUB_URL") || DEFAULT_LDPUB_URL).replace(/\/+$/, ""),
     clientId: get("LDPUB_CLIENT_ID"),
     clientSecret: get("LDPUB_CLIENT_SECRET"),
     user: get("LDPUB_USER"),
   };
+}
+
+// Service token when configured; otherwise the caller's own SSO session.
+// With a TTY and no live session, runs the interactive login right here so
+// first use is one browser hop, not an error message.
+function authHeaders(config, appUrl, { runner, interactive = process.stdin.isTTY } = {}) {
+  if (config.clientId && config.clientSecret) {
+    return {
+      "CF-Access-Client-Id": config.clientId,
+      "CF-Access-Client-Secret": config.clientSecret,
+    };
+  }
+  let token = Access.accessToken(appUrl, runner ? { runner } : {});
+  if (!token && interactive && Access.cloudflaredAvailable(runner || undefined)) {
+    console.error("markup: no shared-canvas session — opening your browser to sign in");
+    token = Access.login(appUrl, runner ? { runner } : {});
+  }
+  if (!token) {
+    throw new Error(
+      `not signed in to the shared canvas — run \`markup login\` ` +
+        `(${Access.cloudflaredAvailable(runner || undefined) ? "then retry" : Access.INSTALL_HINT})`,
+    );
+  }
+  return { "cf-access-token": token };
 }
 
 function kebab(input) {
@@ -64,15 +85,16 @@ async function apiFetch(config, method, apiPath, { headers, body } = {}) {
     redirect: "manual",
     signal: AbortSignal.timeout(60_000),
     headers: {
-      "CF-Access-Client-Id": config.clientId,
-      "CF-Access-Client-Secret": config.clientSecret,
+      ...authHeaders(config, config.url),
       ...headers,
     },
     body,
   });
   if (res.status >= 300 && res.status < 400) {
     throw new Error(
-      "Access rejected the service token — check LDPUB_CLIENT_ID/SECRET (ldpub SETUP.md §5)",
+      config.clientId
+        ? "Access rejected the service token — check LDPUB_CLIENT_ID/SECRET (ldpub SETUP.md §5)"
+        : "Access rejected the session — run `markup login` and retry",
     );
   }
   return res;
@@ -123,7 +145,14 @@ async function publish(file, opts = {}) {
   });
   if (!res.ok) await bailOnError(res, "publish");
 
-  await ensureOverlayAssets(config);
+  // Overlay assets are shared infrastructure: the Worker only lets trusted
+  // service tokens rewrite them, so SSO publishers ship the doc and leave
+  // the canvas's current overlay in place.
+  if (config.clientId && config.clientSecret) {
+    await ensureOverlayAssets(config);
+  } else {
+    console.error("markup: overlay assets left as-is (refreshing them takes a service token)");
+  }
 
   return { url: `${config.url}/${user}/${project}/`, user, project, title };
 }
@@ -174,4 +203,12 @@ async function pull(urlStr, opts = {}) {
   return { ...result, count: annotations.length };
 }
 
-module.exports = { publish, pull, loadConfig, parseCanvasUrl, kebab };
+module.exports = {
+  publish,
+  pull,
+  loadConfig,
+  parseCanvasUrl,
+  kebab,
+  authHeaders,
+  DEFAULT_LDPUB_URL,
+};

@@ -7,6 +7,17 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+
+- Tokenless publish/pull: `markup login` signs a person into the shared
+  canvas with their own SSO (via cloudflared), and `markup publish` /
+  `markup pull` ride that session automatically — no minted service tokens
+  per person, and attribution is the caller's real email. Service tokens
+  still win when configured (agents/CI), and remain required for overlay
+  asset refresh; SSO publishers skip the asset step with a notice. The
+  canvas URL defaults to the shared instance, so a coworker's setup is
+  `brew install cloudflared` + `markup login`, done.
+
 ### Changed
 
 - Review drawer redesigned for at-a-glance triage: flat hairline-divided rows
