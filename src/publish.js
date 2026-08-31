@@ -210,5 +210,6 @@ module.exports = {
   parseCanvasUrl,
   kebab,
   authHeaders,
+  ensureOverlayAssets,
   DEFAULT_LDPUB_URL,
 };

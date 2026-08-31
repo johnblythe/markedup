@@ -145,6 +145,29 @@ program
   });
 
 program
+  .command("push-overlay")
+  .description("Refresh the shared canvas overlay assets from this checkout (service token required)")
+  .action(async () => {
+    try {
+      const { loadConfig, ensureOverlayAssets } = require("../src/publish");
+      const config = loadConfig();
+      if (!config.clientId || !config.clientSecret) {
+        console.error(
+          "markup: overlay assets are shared infrastructure — refreshing them takes a service token " +
+            "(LDPUB_CLIENT_ID/SECRET); SSO sessions can publish docs but not rewrite the overlay",
+        );
+        process.exit(1);
+      }
+      await ensureOverlayAssets(config);
+      console.log(`markup: overlay assets refreshed on ${config.url}`);
+      console.log("markup: every published doc serves the new overlay on next load");
+    } catch (err) {
+      console.error(`markup: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
   .command("login")
   .description("Sign in to the shared canvas with your own SSO (no service token needed)")
   .action(() => {

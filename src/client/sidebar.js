@@ -582,7 +582,9 @@ var Sidebar = (function () {
       var sectionEl = entry.closest(".markup-sidebar-section");
       if (sectionEl) sectionEl.classList.remove("markup-sidebar-section-collapsed");
       entry.classList.add("markup-sidebar-entry-focus");
-      entry.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      // Instant like every other jump: smooth scrolling is silently inert on
+      // some wrapped docs, and the walk should feel zippy anyway.
+      entry.scrollIntoView({ block: "nearest" });
     }
     // Bring the page to the note itself when it's rendered inline.
     if (target.status === "open" && handlers.onScrollToInline) {

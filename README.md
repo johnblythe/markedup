@@ -149,10 +149,26 @@ markup pull https://<worker>/<user>/<project>/
 #   annotation, author, state, and reply thread — paste back to the agent
 ```
 
-Publisher config (service token) comes from `LDPUB_URL`,
-`LDPUB_CLIENT_ID`, `LDPUB_CLIENT_SECRET` in the environment, or a .env
-named by `LDPUB_ENV_FILE` (default `~/code/ldpub/.env`). Set `LDPUB_USER`
-to fix your namespace segment; `--user`/`--project` override per publish.
+Publishing needs a one-time sign-in with your own SSO — no tokens, no
+provisioning:
+
+```bash
+brew install cloudflared   # once per machine
+markup login               # opens the browser; sign in with your work email
+```
+
+`markup publish` and `markup pull` then run as you (attribution is your
+real email) until the session expires; run `markup login` again when it
+does. Publishing even offers the sign-in automatically the first time you
+run it in a terminal.
+
+Agents and CI skip the browser with a Cloudflare Access service token:
+`LDPUB_CLIENT_ID`/`LDPUB_CLIENT_SECRET` (and optionally `LDPUB_URL`) in
+the environment, or a .env named by `LDPUB_ENV_FILE` (default
+`~/code/ldpub/.env`). A configured token always wins over SSO, and only
+token callers may run `markup push-overlay`, which refreshes the shared
+overlay assets that every published doc loads. Set `LDPUB_USER` to fix
+your namespace segment; `--user`/`--project` override per publish.
 
 Annotations on a shared canvas live server-side (one JSON per doc in R2),
 merged last-write-wins per annotation, authors stamped from the Access
