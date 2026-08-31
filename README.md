@@ -1,7 +1,5 @@
 # Markup
 
-_Repo is `markedup`; the command is `markup`._
-
 Point-and-click annotation layer for reviewing rendered HTML artifacts. Wraps a local HTML file with a browser-based annotation overlay served on localhost, then exports a feedback bundle (markdown + cropped PNG screenshots) ready to hand back to the agent that produced it.
 
 Everything runs on localhost. The page is served by a local Node process, the
@@ -31,8 +29,8 @@ cropped screenshot, so the agent knows precisely what you meant.
 Requires Node 18+.
 
 ```bash
-git clone https://github.com/johnblythe/markedup.git
-cd markedup
+git clone https://github.com/johnblythe/markup.git
+cd markup
 npm install
 npm link
 ```

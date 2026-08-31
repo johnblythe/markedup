@@ -49,15 +49,15 @@ function wrapHTML(rawHTML, opts = {}) {
 
   let result = rawHTML;
 
-  // Tag the tab title with "markedup" so a served artifact is findable via
+  // Tag the tab title with "markup" so a served artifact is findable via
   // Chrome's tab search (Cmd+Shift+A) instead of hunting for its port
   // number. Append to an existing <title> so the artifact's own title stays
   // visible; fall back to a fresh one if the source has none.
   const titleInsertion = findInsertion(result, "title");
   if (titleInsertion) {
-    result = insertAt(result, titleInsertion, " — markedup");
+    result = insertAt(result, titleInsertion, " — markup");
   } else {
-    const label = sourceName ? `markedup — ${sourceName}` : "markedup";
+    const label = sourceName ? `markup — ${sourceName}` : "markup";
     result = insertAt(result, findInsertion(result, "head"), `<title>${escapeHTML(label)}</title>\n`);
   }
 

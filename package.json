@@ -22,11 +22,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/johnblythe/markedup.git"
+    "url": "git+https://github.com/johnblythe/markup.git"
   },
-  "homepage": "https://github.com/johnblythe/markedup#readme",
+  "homepage": "https://github.com/johnblythe/markup#readme",
   "bugs": {
-    "url": "https://github.com/johnblythe/markedup/issues"
+    "url": "https://github.com/johnblythe/markup/issues"
   },
   "keywords": [
     "annotation",
