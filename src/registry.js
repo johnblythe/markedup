@@ -26,6 +26,9 @@ function register(entry) {
     pid: process.pid,
     startedAt: new Date().toISOString(),
     kind: entry.kind || "serve",
+    // Multiplayer instances own their annotations file exclusively; serve.js
+    // uses this to refuse a second multiplayer process on the same source.
+    multiplayer: entry.multiplayer === true,
   };
   fs.writeFileSync(fileFor(entry.port), JSON.stringify(data, null, 2));
   return data;

@@ -10,6 +10,10 @@
   --markup-text: #222;
   --markup-muted: #777;
   --markup-border: #ddd;
+  --markup-hairline: #ececec;
+  --markup-warn: #9a6700;
+  --markup-danger: #c0392b;
+  --markup-hover: #fafafa;
   --markup-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
 }
 
@@ -390,7 +394,6 @@ mark.markup-strike,
 .markup-sidebar-list {
   overflow-y: auto;
   flex: 1;
-  padding: 8px;
 }
 .markup-sidebar-empty {
   text-align: center;
@@ -398,31 +401,30 @@ mark.markup-strike,
   padding: 32px 16px;
   font-size: 12px;
 }
+/* Entries are flat rows split by hairlines, not floating cards: less chrome
+ * per note, so the note text is the loudest thing in the drawer. */
 .markup-sidebar-entry {
-  background: #fff;
-  border: 1px solid var(--markup-border);
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--markup-hairline);
+  transition: background 120ms ease;
+}
+.markup-sidebar-entry:hover {
+  background: var(--markup-hover);
 }
 .markup-sidebar-entry-accepted {
-  opacity: 0.7;
-  background: #f8f6f0;
+  opacity: 0.65;
 }
 
 /* Bulk action row at the top of each section's body */
 .markup-sidebar-bulk {
   display: flex;
-  gap: 6px;
-  padding: 4px 4px 8px 4px;
-  margin-bottom: 4px;
-  border-bottom: 1px dashed var(--markup-border);
-  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: flex-end;
+  padding: 6px 14px 2px;
 }
 .markup-sidebar-bulk .markup-sidebar-btn {
-  flex: 1;
   font-size: 10.5px;
-  padding: 4px 6px;
+  padding: 2px 7px;
   white-space: nowrap;
 }
 
@@ -477,25 +479,11 @@ mark.markup-strike,
   color: #fff;
 }
 .markup-sidebar-section-body {
-  padding: 0 8px 8px 8px;
+  padding: 0 0 8px;
 }
 .markup-sidebar-section-collapsed .markup-sidebar-section-body {
   display: none;
 }
-
-/* Status badges */
-.markup-sidebar-status {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 2px 5px;
-  border-radius: 3px;
-  background: var(--markup-border);
-  color: var(--markup-text);
-}
-.markup-sidebar-status-pending { background: var(--markup-accent); color: #fff; }
-.markup-sidebar-status-open { background: #2e7d32; color: #fff; }
-.markup-sidebar-status-accepted { background: #888; color: #fff; }
 
 /* Banner */
 .markup-sidebar-banner {
@@ -533,57 +521,97 @@ mark.markup-strike,
   margin-bottom: 6px;
   flex-wrap: wrap;
 }
-.markup-sidebar-mode {
-  font-size: 9px;
+.markup-sidebar-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 2px 6px;
-  border-radius: 3px;
-  color: #fff;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  flex: none;
 }
-.markup-sidebar-mode-span {
-  background: #b07a1a;
+.markup-sidebar-name {
+  font-size: 12px;
+  font-weight: 600;
 }
-.markup-sidebar-mode-highlight {
-  background: #a89100;
+/* Unattributed note on a shared canvas: neutral, deliberately not an identity hue. */
+.markup-sidebar-avatar-unknown {
+  background: var(--markup-hover);
+  color: var(--markup-muted);
+  border: 1px dashed var(--markup-border);
+  box-sizing: border-box;
 }
-.markup-sidebar-mode-strike {
-  background: #c0392b;
+.markup-sidebar-name-unknown {
+  color: var(--markup-muted);
+  font-weight: 500;
+  font-style: italic;
 }
-.markup-sidebar-mode-pin {
-  background: var(--markup-accent);
+.markup-sidebar-new-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--markup-accent-light);
+  flex: none;
 }
-.markup-sidebar-mode-rect {
-  background: #6b4f1a;
+.markup-sidebar-when {
+  font-size: 10.5px;
+  color: var(--markup-muted);
 }
-.markup-sidebar-pin-num {
+.markup-sidebar-top-spacer {
+  flex: 1;
+}
+.markup-sidebar-why {
   font-size: 10px;
+  font-weight: 600;
+  color: var(--markup-warn);
+  white-space: nowrap;
+}
+.markup-sidebar-kind {
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--markup-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-.markup-sidebar-when {
-  margin-left: auto;
-  font-size: 10px;
-  color: var(--markup-muted);
-}
 .markup-sidebar-note {
   font-size: 13px;
-  line-height: 1.4;
-  margin-bottom: 8px;
+  line-height: 1.45;
+  margin-bottom: 6px;
   white-space: pre-wrap;
+  word-break: break-word;
 }
-.markup-sidebar-context {
-  margin-bottom: 8px;
+/* The quote/thumb is a button (it jumps to the spot in the doc): reset the
+ * button chrome, then draw it as quoted context. */
+.markup-sidebar-ctx {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0 0 6px;
+  cursor: pointer;
+  font-family: inherit;
 }
 .markup-sidebar-quote {
-  font-style: italic;
+  font-size: 11.5px;
+  line-height: 1.35;
   color: var(--markup-muted);
-  font-size: 12px;
   border-left: 2px solid var(--markup-border);
-  padding-left: 8px;
-  background: #fafafa;
-  padding: 4px 8px;
-  border-radius: 3px;
+  padding: 1px 0 1px 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.markup-sidebar-quote:hover {
+  color: var(--markup-text);
+  border-left-color: var(--markup-accent);
 }
 .markup-sidebar-thumb {
   max-width: 100%;
@@ -593,33 +621,47 @@ mark.markup-strike,
 }
 .markup-sidebar-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
+  align-items: center;
   flex-wrap: wrap;
 }
+/* Actions are quiet chips so the note text stays the loudest thing on the
+ * card: Resolve alone carries the accent tint, Remove sits apart on the
+ * right in the danger color. */
 .markup-sidebar-btn {
   cursor: pointer;
-  padding: 4px 9px;
+  padding: 3px 8px;
   font-size: 11px;
   font-family: inherit;
-  background: #f5f5f5;
-  color: var(--markup-text);
-  border: 1px solid var(--markup-border);
-  border-radius: 4px;
+  background: transparent;
+  color: var(--markup-muted);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  transition: background 120ms ease, color 120ms ease;
 }
 .markup-sidebar-btn:hover {
-  background: #eaeaea;
+  background: #efefef;
+  color: var(--markup-text);
 }
 .markup-sidebar-btn-primary {
-  background: var(--markup-accent);
-  color: #fff;
-  border-color: var(--markup-accent);
+  background: rgba(211, 84, 0, 0.09);
+  color: var(--markup-accent);
+  font-weight: 600;
 }
 .markup-sidebar-btn-primary:hover {
-  filter: brightness(0.92);
-  background: var(--markup-accent);
+  background: rgba(211, 84, 0, 0.16);
+  color: var(--markup-accent);
 }
 .markup-sidebar-btn-danger {
-  color: #c0392b;
+  margin-left: auto;
+  color: rgba(192, 57, 43, 0.75);
+}
+.markup-sidebar-btn-danger:hover {
+  background: rgba(192, 57, 43, 0.08);
+  color: var(--markup-danger);
+}
+.markup-sidebar-bulk .markup-sidebar-btn-danger {
+  margin-left: 0;
 }
 
 #markup-toolbar button.markup-detached-has {
@@ -647,4 +689,642 @@ mark.markup-strike,
 @keyframes markup-ghost-pulse {
   0%, 100% { box-shadow: 0 0 0 4px rgba(243, 156, 18, 0.18); }
   50% { box-shadow: 0 0 0 10px rgba(243, 156, 18, 0.08); }
+}
+
+/* --- Shared canvas (multiplayer) --------------------------------------- */
+/* Another reviewer's annotations read violet against the local orange. */
+
+.markup-pin.markup-authored-other {
+  background: #7048b6;
+  border-color: #5a3795;
+}
+
+mark.markup-span.markup-authored-other {
+  box-shadow: 0 2px 0 0 rgba(112, 72, 182, 0.75);
+}
+
+.markup-rect.markup-authored-other {
+  border-color: #7048b6;
+}
+
+/* Shared-canvas badge: the palette's header, not a box within the box. */
+#markup-toolbar .markup-badge {
+  position: relative;
+  margin: 0 0 6px;
+  padding: 0 0 6px;
+  border-bottom: 1px solid var(--markup-border);
+}
+
+#markup-toolbar .markup-badge-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#markup-toolbar .markup-badge-label {
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--markup-accent);
+  cursor: pointer;
+}
+
+#markup-toolbar .markup-badge-new {
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--markup-accent-light);
+  border-radius: 8px;
+  padding: 1px 7px;
+}
+
+#markup-toolbar .markup-badge-help {
+  flex: 0 0 auto;
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  line-height: 16px;
+  font-size: 11px;
+  border-radius: 50%;
+}
+
+#markup-toolbar .markup-badge-meta {
+  font-size: 10px;
+  color: var(--markup-muted);
+  margin-top: 3px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Help panel: opens above the toolbar, non-modal, dismissible. */
+#markup-toolbar .markup-badge-panel {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 8px;
+  width: 260px;
+  padding: 12px 12px 10px;
+  background: var(--markup-bg);
+  border: 1px solid var(--markup-border);
+  border-radius: 6px;
+  box-shadow: var(--markup-shadow);
+  color: var(--markup-text);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+#markup-toolbar .markup-badge-panel.markup-badge-panel-open {
+  display: block;
+}
+
+#markup-toolbar .markup-badge-panel p {
+  margin: 0 0 8px;
+}
+
+#markup-toolbar .markup-badge-panel code {
+  display: inline-block;
+  background: #f5f5f5;
+  border: 1px solid var(--markup-border);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 10.5px;
+  word-break: break-all;
+}
+
+#markup-toolbar .markup-badge-you {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--markup-border);
+  font-size: 10px;
+  color: var(--markup-muted);
+}
+
+#markup-toolbar .markup-badge-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  line-height: 18px;
+  font-size: 14px;
+}
+
+/* --- Reply threads + composer ------------------------------------------ */
+
+/* A thin left rule marks the thread, Linear-comment style; replies are
+ * plain lines, not boxes inside the card. */
+.markup-sidebar-thread {
+  margin: 2px 0 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--markup-hairline);
+}
+
+.markup-sidebar-thread:empty {
+  display: none;
+}
+
+/* Until a reply exists, the thread is just the Reply affordance — no rule. */
+.markup-sidebar-thread:not(:has(.markup-sidebar-reply)) {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.markup-sidebar-reply {
+  padding: 3px 0;
+}
+
+.markup-sidebar-reply-author {
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.markup-sidebar-reply-when {
+  font-size: 9.5px;
+  color: var(--markup-muted);
+  margin-left: 6px;
+}
+
+.markup-sidebar-reply-text {
+  font-size: 11.5px;
+  color: var(--markup-text);
+  line-height: 1.45;
+  margin-top: 1px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.markup-sidebar-reply-btn {
+  font-size: 10.5px;
+  padding: 2px 0;
+  background: transparent;
+  border: 0;
+  color: var(--markup-muted);
+  cursor: pointer;
+}
+
+.markup-sidebar-reply-btn:hover {
+  color: var(--markup-accent);
+}
+
+.markup-sidebar-compose textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  margin-top: 4px;
+  padding: 6px;
+  font-family: inherit;
+  font-size: 11px;
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+  resize: vertical;
+}
+
+.markup-sidebar-compose-buttons {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.markup-sidebar-compose-buttons button {
+  font-size: 10.5px;
+  padding: 3px 10px;
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+  background: #f5f5f5;
+  cursor: pointer;
+}
+
+.markup-sidebar-compose-send {
+  background: var(--markup-accent) !important;
+  border-color: var(--markup-accent) !important;
+  color: #fff;
+}
+
+/* --- Guided review walk -------------------------------------------------- */
+
+/* Unread marker is the header dot (markup-sidebar-new-dot) plus a faint
+ * wash, matching flat rows. */
+.markup-sidebar-entry-new {
+  background: #fffcf4;
+}
+
+/* Keyboard walk focus: inset accent rail instead of an outline box. */
+.markup-sidebar-entry-focus {
+  box-shadow: inset 2px 0 0 var(--markup-accent);
+  background: var(--markup-hover);
+}
+
+#markup-toolbar .markup-badge-new {
+  cursor: pointer;
+}
+
+/* --- Export CTA + menu --------------------------------------------------- */
+
+#markup-toolbar button.markup-btn-primary {
+  flex: 1;
+  background: var(--markup-accent);
+  border-color: var(--markup-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+#markup-toolbar button.markup-btn-more {
+  flex: 0 0 auto;
+  width: 26px;
+}
+
+#markup-toolbar .markup-export-menu {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  margin-top: -2px;
+  background: var(--markup-bg);
+  border: 1px solid var(--markup-border);
+  border-radius: 6px;
+  box-shadow: var(--markup-shadow);
+}
+
+#markup-toolbar .markup-export-menu.markup-export-menu-open {
+  display: flex;
+}
+
+#markup-toolbar .markup-export-menu button {
+  text-align: left;
+  font-size: 11px;
+  padding: 4px 8px;
+  background: #f5f5f5;
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* --- Presence ------------------------------------------------------------ */
+
+#markup-toolbar .markup-badge-presence {
+  font-size: 10px;
+  color: var(--markup-muted);
+  margin-top: 3px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Consolidated chrome: anchored popups + docked palette --------------- */
+
+/* The ⋯ menu opens as a compact popup beside its button, never inline. */
+#markup-toolbar .markup-toolbar-row-anchor {
+  position: relative;
+}
+
+#markup-toolbar .markup-export-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  width: max-content;
+  max-width: 240px;
+  margin-top: 0;
+  z-index: 2;
+}
+
+/* While the review drawer is open the palette docks inside it. */
+#markup-toolbar.markup-toolbar-docked {
+  position: static;
+  min-width: 0;
+  width: auto;
+  border: none;
+  border-bottom: 1px solid var(--markup-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Docked, popups open downward — the palette sits at the drawer's top. */
+#markup-toolbar.markup-toolbar-docked .markup-badge-panel {
+  bottom: auto;
+  top: 100%;
+  margin-bottom: 0;
+  margin-top: 8px;
+  z-index: 2;
+}
+
+#markup-toolbar.markup-toolbar-docked .markup-export-menu {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
+/* --- Read-only popover (another reviewer's note) -------------------------- */
+
+#markup-popover .markup-popover-meta {
+  font-size: 10px;
+  font-weight: 600;
+  color: #7048b6;
+  margin-bottom: 4px;
+}
+
+#markup-popover .markup-popover-note {
+  font-size: 12px;
+  color: var(--markup-text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 6px;
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
+#markup-popover .markup-popover-spacer {
+  flex: 1;
+}
+
+/* ===================== COMMAND PALETTE ===================== */
+/* Search-and-run surface for every doc-level action. Rendered lazily by
+ * src/client/palette.js as a scrim + modal appended to <body>, reused
+ * across opens. Scrim and modal are siblings (not nested), so a click on
+ * the modal never bubbles into the scrim's own close handler. */
+
+.markup-palette-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100010;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.markup-palette-scrim[hidden],
+.markup-palette[hidden] {
+  display: none;
+}
+
+.markup-palette {
+  position: fixed;
+  z-index: 100011;
+  top: 14vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, 92vw);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--markup-bg);
+  color: var(--markup-text);
+  border: 1px solid var(--markup-border);
+  border-radius: 8px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+.markup-palette-search {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--markup-border);
+}
+
+.markup-palette-input {
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--markup-text);
+}
+
+.markup-palette-list {
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.markup-palette-empty {
+  margin: 0;
+  padding: 16px 14px;
+  font-size: 12px;
+  color: var(--markup-muted);
+  text-align: center;
+}
+.markup-palette-empty[hidden] {
+  display: none;
+}
+
+.markup-palette-group {
+  padding: 8px 14px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--markup-muted);
+}
+.markup-palette-group[hidden] {
+  display: none;
+}
+
+.markup-palette-cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--markup-text);
+}
+.markup-palette-cmd[hidden] {
+  display: none;
+}
+
+.markup-palette-cmd:hover,
+.markup-palette-cmd.is-active {
+  background: #f5f5f5;
+}
+
+.markup-palette-cmd-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  text-align: center;
+}
+
+.markup-palette-cmd-label {
+  flex: 1;
+}
+
+.markup-palette-primary .markup-palette-cmd-label {
+  color: var(--markup-accent);
+  font-weight: 600;
+}
+
+.markup-palette-danger .markup-palette-cmd-label {
+  color: #c0392b;
+}
+
+.markup-palette-cmd-hint {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--markup-muted);
+  background: #f5f5f5;
+  border: 1px solid var(--markup-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+/* ===================== TOOLBAR STRIP ===================== */
+/* Compact bottom-right strip: mode segments + export expander + review
+ * drawer + ⌘K, replacing the old stacked T/P/R + Copy + Review + Clear all
+ * rows and the ⋯ overflow menu. Builds on the existing #markup-toolbar
+ * button/anchor/menu/docking rules above; only new layout and icon-button
+ * treatments live here. */
+
+#markup-toolbar .markup-strip-row {
+  --markup-strip-h: 28px;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+#markup-toolbar .markup-strip-segments {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--markup-border);
+  border-radius: 4px;
+}
+
+#markup-toolbar button.markup-strip-seg {
+  flex: 1;
+  border: 0;
+  border-right: 1px solid var(--markup-border);
+  border-radius: 0;
+}
+
+#markup-toolbar button.markup-strip-seg:last-child {
+  border-right: 0;
+}
+
+/* The mode/export buttons sit inside anchored wrappers, so the row's
+ * align-items: stretch never reaches them unless the wrappers pass it on. */
+#markup-toolbar .markup-strip-mode,
+#markup-toolbar .markup-strip-export {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+}
+
+/* Strip controls all take exactly --markup-strip-h: mixed font sizes with
+ * vertical padding is what kept their heights ragged. */
+#markup-toolbar button.markup-strip-mode-btn,
+#markup-toolbar button.markup-strip-icon-btn {
+  box-sizing: border-box;
+  height: var(--markup-strip-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#markup-toolbar button.markup-strip-icon-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  padding: 0;
+  font-size: 13px;
+}
+
+#markup-toolbar button.markup-strip-drawer-btn {
+  width: auto;
+  gap: 5px;
+  padding: 0 9px;
+}
+
+#markup-toolbar .markup-strip-drawer-label {
+  white-space: nowrap;
+}
+
+#markup-toolbar .markup-strip-drawer-count {
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--markup-accent-light);
+  border-radius: 8px;
+  padding: 1px 6px;
+  line-height: 1.3;
+}
+
+#markup-toolbar button.markup-strip-palette-btn {
+  width: auto;
+  padding: 0 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--markup-muted);
+}
+
+#markup-toolbar button.markup-strip-palette-btn:hover {
+  color: var(--markup-text);
+}
+
+/* Collapsed mode control: one button showing the current mode, expanding to a
+   picker — mirrors the export icon's anchored popup and its docked flip. */
+#markup-toolbar .markup-strip-mode {
+  position: relative;
+}
+
+#markup-toolbar button.markup-strip-mode-btn {
+  font-size: 11px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+#markup-toolbar .markup-mode-menu {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  width: max-content;
+  background: var(--markup-bg);
+  border: 1px solid var(--markup-border);
+  border-radius: 6px;
+  box-shadow: var(--markup-shadow);
+  z-index: 5;
+}
+
+#markup-toolbar .markup-mode-menu.markup-mode-menu-open {
+  display: flex;
+}
+
+#markup-toolbar .markup-mode-menu button.markup-strip-seg {
+  text-align: left;
+  width: 100%;
+}
+
+#markup-toolbar.markup-toolbar-docked .markup-mode-menu {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
+/* Every control in the strip lines up to one height and centers its content,
+   so different font sizes (mode 11px, export icon 13px, palette 10.5px) don't
+   read as ragged button heights. The mode/export wrappers become flex so their
+   inner button fills the row height. */
+#markup-toolbar .markup-strip-mode,
+#markup-toolbar .markup-strip-export {
+  display: flex;
+}
+#markup-toolbar .markup-strip-row > *,
+#markup-toolbar .markup-strip-mode > button,
+#markup-toolbar .markup-strip-export > button {
+  min-height: 30px;
+}
+#markup-toolbar .markup-strip-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }

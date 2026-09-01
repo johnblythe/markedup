@@ -55,9 +55,12 @@ var Modes = (function () {
     // Source-change detection: if the source hash changed since the last
     // review, bump every still-open annotation to pending so the user
     // explicitly triages each one against the new version.
+    // Remote mode skips the per-browser triage bump: the annotation set is
+    // shared, so one viewer's localStorage hash must not flip everyone's
+    // annotations to pending. Server-side republish triage is a follow-up.
     var currentHash = window.__MARKUP_SOURCE_HASH__ || "";
     var lastHash = Persist.getLastHash(sourceKey);
-    var sourceChanged = lastHash && currentHash && lastHash !== currentHash;
+    var sourceChanged = !Persist.isRemote() && lastHash && currentHash && lastHash !== currentHash;
     if (sourceChanged) {
       list.forEach(function (a) {
         var status = a.status || "open";
@@ -77,6 +80,7 @@ var Modes = (function () {
     var changed = false;
 
     list.forEach(function (anno) {
+      try {
       var status = anno.status || "open";
 
       if (status === "accepted") {
@@ -100,14 +104,32 @@ var Modes = (function () {
         renderRect(anno);
         rendered = true;
       }
+      if (rendered) decorateAuthored(anno);
       if (!rendered) {
-        anno.status = "pending";
-        anno.carryReason = "anchor-lost";
-        Persist.upsertAnnotation(sourceKey, anno);
-        pending.push(anno);
-        changed = true;
+        if (Persist.isRemote()) {
+          // A failed re-anchor here is a per-view rendering miss (DOM timing,
+          // a sibling span splitting the text node), NOT a real source change.
+          // Persisting status=pending would write it to the shared doc and
+          // detach a reviewer's comment for everyone. Keep it open and
+          // visible; the next hydrate retries the highlight.
+          open.push(anno);
+        } else {
+          anno.status = "pending";
+          anno.carryReason = "anchor-lost";
+          Persist.upsertAnnotation(sourceKey, anno);
+          pending.push(anno);
+          changed = true;
+        }
       } else {
         open.push(anno);
+      }
+      } catch (err) {
+        // One annotation must never abort the whole render — that would leave
+        // the drawer stale and the note invisible. Keep it visible in Open.
+        if (typeof console !== "undefined") {
+          console.warn("[markup] render skipped for", anno && anno.id, err);
+        }
+        if (open.indexOf(anno) === -1) open.push(anno);
       }
     });
 
@@ -120,6 +142,11 @@ var Modes = (function () {
         onReopen: reopenAnnotation,
         onRemove: removeAnnotation,
         onScrollToInline: scrollToInline,
+        // A posted reply lands in the cache; rebuild so the thread shows now.
+        onThreadChange: function () {
+          refresh();
+          updateCount();
+        },
         sourceChanged: sourceChanged,
       },
     );
@@ -131,6 +158,38 @@ var Modes = (function () {
       window.__MARKUP_UPDATE_SIDEBAR_COUNT__();
     }
     return changed;
+  }
+
+  // Whose note is this? On a shared canvas only the author edits or removes
+  // it; anyone may resolve/re-open (contract: either party) and reply. Solo
+  // mode owns everything.
+  function ownsAnno(anno) {
+    if (!Persist.isRemote()) return true;
+    return !anno.author || anno.author === Persist.self();
+  }
+
+  // Reply from a popover: land in the drawer with this note's composer open.
+  function replyVia(anno) {
+    if (!Persist.isRemote()) return undefined;
+    return function () {
+      Sidebar.openReply(anno.id);
+    };
+  }
+
+  // Shared canvas: mark inline artifacts (pin badge, span mark, rect box)
+  // with their author. Someone else's annotations get a distinct look.
+  function decorateAuthored(anno) {
+    if (!Persist.isRemote() || !anno.author) return;
+    // Scope to inline artifacts — the sidebar's entries carry the same
+    // data-anno-id and would otherwise shadow the pin in document order.
+    var id = anno.id.replace(/"/g, "");
+    var el = document.querySelector(
+      '.markup-pin[data-anno-id="' + id + '"], mark.markup-span[data-anno-id="' + id + '"], ' +
+        '.markup-rect[data-anno-id="' + id + '"]',
+    );
+    if (!el) return;
+    el.setAttribute("title", anno.author + (anno.note ? " — " + anno.note : ""));
+    if (anno.author !== Persist.self()) el.classList.add("markup-authored-other");
   }
 
   // --- Annotation lifecycle actions (used by sidebar + inline popover) -----
@@ -170,10 +229,10 @@ var Modes = (function () {
     }
     var rect = el.getBoundingClientRect();
     var sy = window.scrollY || 0;
-    window.scrollTo({
-      top: Math.max(0, rect.top + sy - window.innerHeight / 2),
-      behavior: "smooth",
-    });
+    // Instant, not smooth: smooth window.scrollTo is silently inert on some
+    // wrapped docs (observed in Chrome), and the ghost flash below already
+    // shows where you landed.
+    window.scrollTo(0, Math.max(0, rect.top + sy - window.innerHeight / 2));
     // Flash to draw attention.
     var ghost = document.createElement("div");
     ghost.className = "markup-context-ghost";
@@ -195,12 +254,9 @@ var Modes = (function () {
   function showAnnotationContext(anno) {
     var vr = anno.viewportRect;
     if (!vr) return;
-    // Scroll so the original spot is centered.
-    window.scrollTo({
-      top: Math.max(0, vr.y + vr.h / 2 - window.innerHeight / 2),
-      left: 0,
-      behavior: "smooth",
-    });
+    // Scroll so the original spot is centered. Instant, not smooth: smooth
+    // window.scrollTo is silently inert on some wrapped docs.
+    window.scrollTo(0, Math.max(0, vr.y + vr.h / 2 - window.innerHeight / 2));
     // Flash a temporary ghost outline at the original coords so the user can
     // see exactly where the annotation used to live.
     var ghost = document.createElement("div");
@@ -376,6 +432,9 @@ var Modes = (function () {
     pendingMark.className = "markup-span";
     pendingMark.setAttribute("data-anno-id", anno.id);
     Persist.upsertAnnotation(sourceKey, anno);
+    // Author's own write: rebuild the review drawer now, don't wait for the
+    // ~10s poll (that cadence is only for other reviewers' changes).
+    refresh();
     updateCount();
   }
 
@@ -437,55 +496,126 @@ var Modes = (function () {
     return wrapFirstTextMatch(anchorEl, text, anno.id);
   }
 
-  function wrapFirstTextMatch(root, needle, annoId, className) {
-    var markClassName = className || "markup-span";
-    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-    var node;
-    while ((node = walker.nextNode())) {
-      var idx = node.nodeValue.indexOf(needle);
-      if (idx !== -1) {
-        var range = document.createRange();
-        range.setStart(node, idx);
-        range.setEnd(node, idx + needle.length);
-        var mark = document.createElement("mark");
-        mark.className = markClassName;
-        mark.setAttribute("data-anno-id", annoId);
-        try {
-          range.surroundContents(mark);
-          return true;
-        } catch (_e) {
-          try {
-            var frag = range.extractContents();
-            mark.appendChild(frag);
-            range.insertNode(mark);
-            return true;
-          } catch (_e2) {
-            return false;
-          }
-        }
+  // Text already wrapped by an earlier span this pass must be skipped, so two
+  // spans in the same element don't shadow or split-break each other on
+  // re-hydrate. The walker still visits the fragments an earlier mark left
+  // behind (they sit outside the mark), so a distinct second selection is
+  // still found.
+  function insideSpanMark(node) {
+    var p = node.parentNode;
+    while (p && p !== document.body) {
+      if (
+        p.classList &&
+        (p.classList.contains("markup-span") ||
+          p.classList.contains("markup-highlight") ||
+          p.classList.contains("markup-strike"))
+      ) {
+        return true;
       }
-    }
-    walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-    var normalizedNeedle = needle.replace(/\s+/g, " ").trim();
-    while ((node = walker.nextNode())) {
-      var normalized = node.nodeValue.replace(/\s+/g, " ");
-      if (normalized.indexOf(normalizedNeedle) !== -1) {
-        var startIdx = node.nodeValue.search(/\S/);
-        var range2 = document.createRange();
-        range2.setStart(node, Math.max(0, startIdx));
-        range2.setEnd(node, Math.min(node.nodeValue.length, startIdx + needle.length));
-        var mark2 = document.createElement("mark");
-        mark2.className = markClassName;
-        mark2.setAttribute("data-anno-id", annoId);
-        try {
-          range2.surroundContents(mark2);
-          return true;
-        } catch (_e) {
-          return false;
-        }
-      }
+      p = p.parentNode;
     }
     return false;
+  }
+
+  function spanTextWalker(root) {
+    return document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (n) {
+        return insideSpanMark(n) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      },
+    });
+  }
+
+  // A selection routinely crosses element boundaries (bold runs, links, line
+  // wraps), so the needle may exist in no single text node. Search the
+  // concatenation of the walker's text nodes and map hits back to per-node
+  // offsets; the whitespace-insensitive pass covers newline drift between the
+  // captured selection and the serialized source.
+  function wrapFirstTextMatch(root, needle, annoId, className) {
+    var markClassName = className || "markup-span";
+    if (!needle) return false;
+    var walker = spanTextWalker(root);
+    var nodes = [];
+    var starts = [];
+    var full = "";
+    var node;
+    while ((node = walker.nextNode())) {
+      nodes.push(node);
+      starts.push(full.length);
+      full += node.nodeValue;
+    }
+    if (!nodes.length) return false;
+
+    var s = full.indexOf(needle);
+    var e = s === -1 ? -1 : s + needle.length;
+
+    if (s === -1) {
+      // Collapse whitespace runs on both sides, keeping a map from each
+      // collapsed character back to its index in `full`.
+      var map = [];
+      var collapsed = "";
+      var inWs = false;
+      for (var i = 0; i < full.length; i++) {
+        if (/\s/.test(full[i])) {
+          if (!inWs) {
+            collapsed += " ";
+            map.push(i);
+          }
+          inWs = true;
+        } else {
+          collapsed += full[i];
+          map.push(i);
+          inWs = false;
+        }
+      }
+      var needleN = needle.replace(/\s+/g, " ").trim();
+      if (!needleN) return false;
+      var cs = collapsed.indexOf(needleN);
+      if (cs === -1) return false;
+      s = map[cs];
+      e = map[cs + needleN.length - 1] + 1;
+    }
+
+    var startPos = positionAt(nodes, starts, s, false);
+    var endPos = positionAt(nodes, starts, e, true);
+    if (!startPos || !endPos) return false;
+
+    var range = document.createRange();
+    range.setStart(startPos.node, startPos.offset);
+    range.setEnd(endPos.node, endPos.offset);
+    var mark = document.createElement("mark");
+    mark.className = markClassName;
+    mark.setAttribute("data-anno-id", annoId);
+    try {
+      // Throws whenever the range partially selects a non-text node (any
+      // cross-node match); extract/insert splits the boundary elements the
+      // same way the creation path does.
+      range.surroundContents(mark);
+      return true;
+    } catch (_e) {
+      try {
+        var frag = range.extractContents();
+        mark.appendChild(frag);
+        range.insertNode(mark);
+        return true;
+      } catch (_e2) {
+        return false;
+      }
+    }
+  }
+
+  // Map an offset in the concatenated text back to {node, offset}. An end
+  // offset landing on a node boundary belongs to the earlier node's tail, a
+  // start offset to the later node's head.
+  function positionAt(nodes, starts, index, isEnd) {
+    for (var i = nodes.length - 1; i >= 0; i--) {
+      var rel = index - starts[i];
+      var len = nodes[i].nodeValue.length;
+      if (rel < 0) continue;
+      if (isEnd ? rel > 0 && rel <= len : rel < len) {
+        return { node: nodes[i], offset: rel };
+      }
+    }
+    return null;
   }
 
   function installSpanClickDelegate() {
@@ -502,11 +632,16 @@ var Modes = (function () {
         Popover.show({
           anchorRect: t.getBoundingClientRect(),
           initialText: anno.note,
-          canDelete: true,
+          readOnly: !ownsAnno(anno),
+          author: anno.author,
+          createdAt: anno.createdAt,
+          onReply: replyVia(anno),
+          canDelete: ownsAnno(anno),
           canAccept: true,
           onSave: function (note) {
             anno.note = note;
             Persist.upsertAnnotation(sourceKey, anno);
+            refresh();
             updateCount();
           },
           onAccept: function () {
@@ -569,11 +704,16 @@ var Modes = (function () {
         Popover.show({
           anchorRect: t.getBoundingClientRect(),
           initialText: anno.note,
-          canDelete: true,
+          readOnly: !ownsAnno(anno),
+          author: anno.author,
+          createdAt: anno.createdAt,
+          onReply: replyVia(anno),
+          canDelete: ownsAnno(anno),
           canAccept: true,
           onSave: function (note) {
             anno.note = note;
             Persist.upsertAnnotation(sourceKey, anno);
+            refresh();
             updateCount();
           },
           onAccept: function () {
@@ -636,11 +776,16 @@ var Modes = (function () {
         Popover.show({
           anchorRect: t.getBoundingClientRect(),
           initialText: anno.note,
-          canDelete: true,
+          readOnly: !ownsAnno(anno),
+          author: anno.author,
+          createdAt: anno.createdAt,
+          onReply: replyVia(anno),
+          canDelete: ownsAnno(anno),
           canAccept: true,
           onSave: function (note) {
             anno.note = note;
             Persist.upsertAnnotation(sourceKey, anno);
+            refresh();
             updateCount();
           },
           onAccept: function () {
@@ -717,6 +862,7 @@ var Modes = (function () {
       onSave: function (note) {
         anno.note = note;
         Persist.upsertAnnotation(sourceKey, anno);
+        refresh();
         updateCount();
       },
       onCancel: function () {
@@ -736,11 +882,16 @@ var Modes = (function () {
     Popover.show({
       anchorRect: badge.getBoundingClientRect(),
       initialText: anno.note,
-      canDelete: true,
+      readOnly: !ownsAnno(anno),
+      author: anno.author,
+      createdAt: anno.createdAt,
+      onReply: replyVia(anno),
+      canDelete: ownsAnno(anno),
       canAccept: true,
       onSave: function (note) {
         anno.note = note;
         Persist.upsertAnnotation(sourceKey, anno);
+        refresh();
         updateCount();
       },
       onAccept: function () {
@@ -913,6 +1064,7 @@ var Modes = (function () {
       onSave: function (note) {
         anno.note = note;
         Persist.upsertAnnotation(sourceKey, anno);
+        refresh();
         updateCount();
       },
       onCancel: function () {
@@ -937,11 +1089,16 @@ var Modes = (function () {
     Popover.show({
       anchorRect: box.getBoundingClientRect(),
       initialText: anno.note,
-      canDelete: true,
+      readOnly: !ownsAnno(anno),
+      author: anno.author,
+      createdAt: anno.createdAt,
+      onReply: replyVia(anno),
+      canDelete: ownsAnno(anno),
       canAccept: true,
       onSave: function (note) {
         anno.note = note;
         Persist.upsertAnnotation(sourceKey, anno);
+        refresh();
         updateCount();
       },
       onAccept: function () {
@@ -975,6 +1132,10 @@ var Modes = (function () {
     box.style.height = (p.h || 0) + "px";
   }
 
+  function isReattaching() {
+    return !!reattachTarget;
+  }
+
   return {
     init: init,
     setActive: setActive,
@@ -982,5 +1143,6 @@ var Modes = (function () {
     hydrate: hydrate,
     refresh: refresh,
     isInsideMarkupUI: isInsideMarkupUI,
+    isReattaching: isReattaching,
   };
 })();

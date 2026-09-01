@@ -4,6 +4,7 @@ const path = require("node:path");
 const { wrapHTML } = require("./wrap");
 const { buildClientBundle, getStylesCSS } = require("./client-bundle");
 const { writeExportBundle } = require("./export");
+const { createAnnotationStore } = require("./annostore");
 const registry = require("./registry");
 const { SERVE_PORT, RESERVED_PORTS, isReserved, listenWithFallback } = require("./ports");
 
@@ -104,16 +105,168 @@ async function startServer(filePath, opts = {}) {
     );
   }
   const autoOpen = opts.autoOpen !== false;
+  // Multiplayer mode: annotations flow through the local annotations API
+  // (shared JSON next to the source file) instead of each browser's
+  // localStorage. The API itself is always mounted — it is the contract stub
+  // other tooling (the Slack bridge) tests against — but the overlay only
+  // uses it when the page was served with multiplayer on.
+  const multiplayer = opts.multiplayer === true;
+
+  // Two multiplayer processes on one file would interleave read-modify-write
+  // cycles on the same annotations JSON and silently lose writes. Refuse the
+  // second process (the registry is keyed by port, so check sourcePath).
+  if (multiplayer) {
+    const clash = registry
+      .list()
+      .find(
+        (it) => it.multiplayer && it.sourcePath === sourcePath && it.pid !== process.pid,
+      );
+    if (clash) {
+      throw new Error(
+        `${sourceName} is already served in multiplayer mode by pid ${clash.pid} on port ${clash.port} — annotate there or stop it first`,
+      );
+    }
+  }
+  const projectSlug = sourceName
+    .replace(/\.[^.]+$/, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "artifact";
+  const annoStore = createAnnotationStore(sourcePath);
+  // Presence heartbeats, identity -> last-seen ISO. In-memory on purpose.
+  const presenceViewers = new Map();
 
   const clientBundle = buildClientBundle();
   const stylesCSS = getStylesCSS();
   const modernScreenshotPath = require.resolve("modern-screenshot/dist/index.js");
   const modernScreenshotSrc = fs.readFileSync(modernScreenshotPath);
 
+  // Persona from the page URL: ?persona= is the primary name (the two-tab
+  // sandbox), ?as= is the older alias. Prefer persona when both are present.
+  function personaFrom(url) {
+    const persona = url.searchParams.get("persona");
+    if (persona && persona.trim()) return persona.trim().slice(0, 200);
+    const as = url.searchParams.get("as");
+    if (as && as.trim()) return as.trim().slice(0, 200);
+    return null;
+  }
+
+  // Local identity: header wins (API calls carry the baked persona), then the
+  // page URL's ?persona=/?as=, then a friendly default.
+  function identityFor(req, url) {
+    const header = req.headers["x-markup-user"];
+    if (typeof header === "string" && header.trim()) return header.trim().slice(0, 200);
+    return personaFrom(url) || "local@dev";
+  }
+
+  // Annotations API (contract stub). Accepts any {user}/{project} pair and
+  // maps them all onto this instance's single store.
+  async function handleAnnotationApi(req, res, url, pathname) {
+    const me = identityFor(req, url);
+
+    if (pathname === "/api/me" && req.method === "GET") {
+      return sendJSON(res, 200, { email: me });
+    }
+
+    const m = pathname.match(
+      /^\/api\/([^/]+)\/([^/]+)\/(annotations|shots|presence)(?:\/([^/]+))?(?:\/(replies))?$/,
+    );
+    if (!m) return null; // not an API path — fall through to static serving
+    const [, user, project, section, item, repliesSeg] = m;
+
+    // Presence heartbeat (in-memory; the stub restarts fresh, which is fine
+    // for something that only says "who's looking right now").
+    if (section === "presence" && !item) {
+      if (req.method === "POST") presenceViewers.set(me, new Date().toISOString());
+      if (req.method === "POST" || req.method === "GET") {
+        const now = Date.now();
+        const viewers = [];
+        for (const [email, at] of presenceViewers) {
+          if (now - Date.parse(at) > 24 * 60 * 60 * 1000) presenceViewers.delete(email);
+          else viewers.push({ email, at });
+        }
+        return sendJSON(res, 200, { viewers });
+      }
+      return sendJSON(res, 404, { error: "not found" });
+    }
+
+    if (section === "annotations") {
+      if (req.method === "GET" && !item) {
+        const out = annoStore.list(req.headers["if-none-match"]);
+        if (out.status === 304) {
+          res.writeHead(304, { ETag: out.etag });
+          return res.end();
+        }
+        if (out.status !== 200) return sendJSON(res, out.status, out.body);
+        const body = JSON.stringify(out.body);
+        res.writeHead(out.status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": Buffer.byteLength(body),
+          ETag: out.etag,
+          "Cache-Control": "no-store",
+        });
+        return res.end(body);
+      }
+      if (req.method === "PUT" && item && !repliesSeg) {
+        let payload;
+        try {
+          payload = JSON.parse((await readBody(req, MAX_POST_BYTES)).toString("utf-8"));
+        } catch (_e) {
+          return sendJSON(res, 400, { error: "invalid JSON" });
+        }
+        const out = annoStore.put(item, payload, me);
+        return sendJSON(res, out.status, out.body);
+      }
+      if (req.method === "DELETE" && item && !repliesSeg) {
+        const out = annoStore.tombstone(item, me);
+        return sendJSON(res, out.status, out.body);
+      }
+      if (req.method === "POST" && item && repliesSeg === "replies") {
+        let payload;
+        try {
+          payload = JSON.parse((await readBody(req, MAX_POST_BYTES)).toString("utf-8"));
+        } catch (_e) {
+          return sendJSON(res, 400, { error: "invalid JSON" });
+        }
+        const out = annoStore.reply(item, payload, me);
+        return sendJSON(res, out.status, out.body);
+      }
+      return sendJSON(res, 404, { error: "not found" });
+    }
+
+    // shots
+    if (section === "shots" && item) {
+      if (req.method === "PUT") {
+        let buf;
+        try {
+          buf = await readBody(req, MAX_POST_BYTES);
+        } catch (e) {
+          return sendError(res, e.status || 400, e.message);
+        }
+        const out = annoStore.putShot(item, buf, user, project);
+        return sendJSON(res, out.status, out.body);
+      }
+      if (req.method === "GET") {
+        const shot = annoStore.getShot(item);
+        if (!shot) return sendJSON(res, 404, { error: "not found" });
+        return sendBuffer(res, 200, "image/png", shot);
+      }
+    }
+    return sendJSON(res, 404, { error: "not found" });
+  }
+
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, `http://localhost:${port}`);
       const pathname = decodeURIComponent(url.pathname);
+
+      // Annotations API (multiplayer contract stub) — must dispatch before
+      // the GET/HEAD method guard below since it speaks PUT/POST/DELETE.
+      if (pathname === "/api/me" || pathname.startsWith("/api/")) {
+        const handled = await handleAnnotationApi(req, res, url, pathname);
+        if (handled !== null) return handled;
+      }
 
       // POST /export
       if (req.method === "POST" && pathname === "/export") {
@@ -150,6 +303,9 @@ async function startServer(filePath, opts = {}) {
           sourceName,
           styles: stylesCSS,
           sourceHash,
+          remote: multiplayer
+            ? { user: "local", project: projectSlug, identity: personaFrom(url) || undefined }
+            : undefined,
         });
         return sendBuffer(res, 200, "text/html; charset=utf-8", Buffer.from(wrapped, "utf-8"));
       }
@@ -193,6 +349,9 @@ async function startServer(filePath, opts = {}) {
           sourceName,
           styles: stylesCSS,
           sourceHash,
+          remote: multiplayer
+            ? { user: "local", project: projectSlug, identity: personaFrom(url) || undefined }
+            : undefined,
         });
         return sendBuffer(res, 200, "text/html; charset=utf-8", Buffer.from(wrapped, "utf-8"));
       }
@@ -212,7 +371,7 @@ async function startServer(filePath, opts = {}) {
   const url = `http://127.0.0.1:${actualPort}/`;
 
   // Advertise this instance for `markup list` / `markup dash`.
-  registry.register({ port: actualPort, sourcePath, sourceName, kind: "serve" });
+  registry.register({ port: actualPort, sourcePath, sourceName, kind: "serve", multiplayer });
   registry.installLifecycle(actualPort);
   server.once("close", () => registry.unregister(actualPort));
 

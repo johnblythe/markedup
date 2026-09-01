@@ -111,6 +111,13 @@ Total annotations: 5
 - Pin ① on `td` (body > div:nth-of-type(1) > table > tbody > tr:nth-of-type(3) > td:nth-of-type(2)) — text: "At risk": link the rate-limit decision doc here
 ```
 
+## Slack review loop
+
+For team review, `markup share <url>` binds a published doc to a private
+Slack channel and `markup bridge <url>` mirrors annotations into per-note
+threads, carrying thread replies back onto the page. See
+[docs/slack-ops.md](docs/slack-ops.md).
+
 ## Claude Code skill
 
 `skill/SKILL.md` teaches a Claude Code agent to drive this tool: serve the HTML
@@ -124,6 +131,63 @@ ln -s "$PWD/skill" ~/.claude/skills/markup
 
 Then `/markup` in a Claude Code session serves the last HTML artifact it
 produced. `/markup list`, `/markup dash`, and `/markup stop` map to the CLI.
+
+## Shared canvas (multiplayer)
+
+Publish an artifact once and review it together at one URL — every
+reviewer sees everyone's pins, highlights, and rects, attributed, within
+about ten seconds. Backed by an [ldpub](https://github.com/johnblythe/ldpub)
+Worker (Cloudflare Access gated); reviewers need no setup beyond opening
+the link and passing the email gate.
+
+```bash
+markup publish path/to/report.html --title "Q3 Report"
+# → https://<worker>/<user>/<project>/   ← send this URL to reviewers
+
+markup pull https://<worker>/<user>/<project>/
+# → writes <project>.feedback-<stamp>.md (+ screenshot assets) with every
+#   annotation, author, state, and reply thread — paste back to the agent
+```
+
+Publishing needs a one-time sign-in with your own SSO — no tokens, no
+provisioning:
+
+```bash
+brew install cloudflared   # once per machine
+markup login               # opens the browser; sign in with your work email
+```
+
+`markup publish` and `markup pull` then run as you (attribution is your
+real email) until the session expires; run `markup login` again when it
+does. Publishing even offers the sign-in automatically the first time you
+run it in a terminal.
+
+Agents and CI skip the browser with a Cloudflare Access service token:
+`LDPUB_CLIENT_ID`/`LDPUB_CLIENT_SECRET` (and optionally `LDPUB_URL`) in
+the environment, or a .env named by `LDPUB_ENV_FILE` (default
+`~/code/ldpub/.env`). A configured token always wins over SSO, and only
+token callers may run `markup push-overlay`, which refreshes the shared
+overlay assets that every published doc loads. Set `LDPUB_USER` to fix
+your namespace segment; `--user`/`--project` override per publish.
+
+Annotations on a shared canvas live server-side (one JSON per doc in R2),
+merged last-write-wins per annotation, authors stamped from the Access
+identity. Someone else's marks render violet; yours stay orange. Replies
+(from the canvas API or the Slack bridge) show under each note in the
+review sidebar. Append `?raw=1` to any published page to view it without
+the overlay.
+
+Local multiplayer without any of that infrastructure:
+
+```bash
+markup serve report.html --multiplayer
+# annotations persist in report.annotations.json next to the source and
+# sync across every open tab; set identity per tab with ?as=you@example
+```
+
+The same HTTP API the Worker speaks is mounted on the local server
+(`/api/{user}/{project}/annotations`, identity via `X-Markup-User`), so
+tooling built against one works against the other.
 
 ## Contributing
 

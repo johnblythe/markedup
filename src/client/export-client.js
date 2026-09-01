@@ -300,7 +300,46 @@ var ExportClient = (function () {
     );
   }
 
+  function feedbackFileName(stamp) {
+    var src = window.__MARKUP_SOURCE_NAME__ || "artifact.html";
+    var stem = src.replace(/\.[^.]+$/, "");
+    return stem + ".feedback-" + stamp + ".md";
+  }
+
+  // Trigger a real browser download of a text file. Used on the shared canvas,
+  // where there is no local disk to write to and no /export endpoint.
+  function triggerDownload(filename, text) {
+    var blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+
+  // Shared-canvas disk export: the page can't write a folder next to a source
+  // that lives in the cloud, so download a single self-contained .md with the
+  // screenshots inlined. The bundle with separate PNG files comes from the
+  // `markup pull <url>` CLI.
+  function exportToDownload(sourceKey) {
+    var built = buildPayload(sourceKey, { inlineImages: true });
+    var filename = feedbackFileName(built.stamp);
+    triggerDownload(filename, built.markdown);
+    Toast.show("Downloaded " + filename + " — run `markup pull <url>` for a bundle with separate PNGs", 5000);
+  }
+
   function exportToDisk(sourceKey) {
+    // On a shared canvas there is no local source folder and the Worker
+    // serves no /export route; download the markdown directly instead.
+    if (typeof Persist !== "undefined" && Persist.isRemote && Persist.isRemote()) {
+      exportToDownload(sourceKey);
+      return;
+    }
     var built = buildPayload(sourceKey, { inlineImages: false });
     Toast.show("Writing feedback bundle to disk...");
     fetch("/export", {
@@ -344,5 +383,6 @@ var ExportClient = (function () {
     buildPayload: buildPayload,
     exportToClipboard: exportToClipboard,
     exportToDisk: exportToDisk,
+    exportToDownload: exportToDownload,
   };
 })();

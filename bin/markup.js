@@ -73,6 +73,11 @@ program
     `port to listen on (default: ${SERVE_PORT}, steps up when busy)`,
   )
   .option("--no-open", "do not auto-open the browser")
+  .option(
+    "--multiplayer",
+    "shared annotations: store next to the source file and sync every open tab " +
+      "(identity via ?as=you@example in the page URL)",
+  )
   .action(async (file, opts) => {
     const resolved = path.resolve(file);
     if (!fs.existsSync(resolved)) {
@@ -98,9 +103,104 @@ program
       }
     }
     try {
-      const { url } = await startServer(resolved, { port, autoOpen: opts.open !== false });
+      const { url } = await startServer(resolved, {
+        port,
+        autoOpen: opts.open !== false,
+        multiplayer: opts.multiplayer === true,
+      });
       console.log(`markup: serving ${path.basename(resolved)} at ${url}`);
+      if (opts.multiplayer) {
+        // Two personas in one browser: open each URL in its own tab to review
+        // as two people. Each tab tracks its own identity, notes, and "N new".
+        const base = url.replace(/\/$/, "");
+        console.log(`markup: open two tabs to review as two people:`);
+        console.log(`markup:   you:       ${base}/?persona=jb`);
+        console.log(`markup:   teammate:  ${base}/?persona=jb2`);
+      }
       console.log(`markup: press Ctrl+C to stop`);
+    } catch (err) {
+      console.error(`markup: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("publish <file>")
+  .description("Publish an HTML file to the shared canvas (ldpub) and print its URL")
+  .option("--title <title>", "human title shown in listings (default: file stem)")
+  .option("--user <user>", "namespace user segment (default: LDPUB_USER or $USER)")
+  .option("--project <project>", "project slug (default: kebab-cased file stem)")
+  .action(async (file, opts) => {
+    try {
+      const { publish } = require("../src/publish");
+      const result = await publish(file, opts);
+      console.log(`markup: published "${result.title}"`);
+      console.log(`markup: shared canvas at ${result.url}`);
+      console.log("markup: reviewers annotate right on that page; pull feedback with:");
+      console.log(`markup:   markup pull ${result.url}`);
+    } catch (err) {
+      console.error(`markup: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("push-overlay")
+  .description("Refresh the shared canvas overlay assets from this checkout (service token required)")
+  .action(async () => {
+    try {
+      const { loadConfig, ensureOverlayAssets } = require("../src/publish");
+      const config = loadConfig();
+      if (!config.clientId || !config.clientSecret) {
+        console.error(
+          "markup: overlay assets are shared infrastructure — refreshing them takes a service token " +
+            "(LDPUB_CLIENT_ID/SECRET); SSO sessions can publish docs but not rewrite the overlay",
+        );
+        process.exit(1);
+      }
+      await ensureOverlayAssets(config);
+      console.log(`markup: overlay assets refreshed on ${config.url}`);
+      console.log("markup: every published doc serves the new overlay on next load");
+    } catch (err) {
+      console.error(`markup: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("login")
+  .description("Sign in to the shared canvas with your own SSO (no service token needed)")
+  .action(() => {
+    try {
+      const Access = require("../src/access");
+      const { loadConfig } = require("../src/publish");
+      const config = loadConfig();
+      if (config.clientId && config.clientSecret) {
+        console.log("markup: a service token is configured — publish/pull already use it, no login needed");
+        return;
+      }
+      Access.login(config.url);
+      console.log(`markup: signed in to ${config.url}`);
+      console.log("markup: publish and pull now run as you; re-run this when the session expires");
+    } catch (err) {
+      console.error(`markup: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("pull <url>")
+  .description("Fetch shared-canvas annotations and write the feedback bundle (md + PNGs)")
+  .option("--dir <dir>", "directory to write the bundle into (default: cwd)")
+  .action(async (url, opts) => {
+    try {
+      const { pull } = require("../src/publish");
+      const result = await pull(url, opts);
+      console.log(`markup: pulled ${result.count} annotation(s)`);
+      console.log(`markup: wrote ${result.feedbackPath}`);
+      if (result.assets && result.assets.length) {
+        console.log(`markup: + ${result.assets.length} screenshot(s) in ${result.assetsDir}`);
+      }
     } catch (err) {
       console.error(`markup: ${err.message}`);
       process.exit(1);
@@ -154,7 +254,10 @@ program
     } else if (target) {
       const resolved = path.resolve(target);
       toStop = items.filter(
-        (i) => i.sourcePath === resolved || path.basename(i.sourcePath) === target,
+        (i) =>
+          i.sourcePath === resolved ||
+          i.sourcePath === target || // bridges register a doc URL, not a file path
+          path.basename(i.sourcePath) === target,
       );
       if (!toStop.length) {
         console.error(`markup: no instance serving ${target}`);
@@ -295,6 +398,79 @@ program
         );
         process.exit(1);
       }
+      console.error(`markup: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("share <url>")
+  .description("Share a published Marked Up doc into a private Slack channel")
+  .option("--to <emails...>", "invite these people by email")
+  .option("--owner <email>", "doc owner: gets the activity digest when others annotate")
+  .option("--test", "use the markd-test- channel prefix (John-only test channels)")
+  .option("--channel <name>", "explicit channel name instead of markd-<slug>")
+  .option("--state-dir <dir>", "bridge state directory (default ~/.markup/bridge)")
+  .action(async (url, opts) => {
+    const { shareDoc } = require("../src/slackops/share");
+    try {
+      const result = await shareDoc({
+        docUrl: url,
+        to: opts.to || [],
+        owner: opts.owner,
+        test: opts.test === true,
+        channelOverride: opts.channel,
+        stateDir: opts.stateDir,
+      });
+      console.log(`markup: shared to #${result.channelName} (${result.channelId})`);
+      console.log(`markup: start the bridge with \`markup bridge ${url}${opts.test ? " --test" : ""}\``);
+    } catch (err) {
+      console.error(`markup: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("bridge <url>")
+  .description("Mirror annotations to the doc's Slack channel and thread replies back")
+  .option("--test", "use the markd-test- channel prefix")
+  .option("--channel <name>", "explicit channel name instead of markd-<slug>")
+  .option("--interval <seconds>", "poll interval (default 30, min 15)")
+  .option("--once", "run a single sync cycle and exit")
+  .option("--no-archive", "do not archive the channel when everything is resolved")
+  .option("--owner <email>", "doc owner: gets the activity digest when others annotate")
+  .option("--nudge-to <target>", "digest target: channel (default), dm, or off")
+  .option("--nudge-interval <seconds>", "minimum quiet time between digests (default 600)")
+  .option("--state-dir <dir>", "bridge state directory (default ~/.markup/bridge)")
+  .action(async (url, opts) => {
+    const { startBridge } = require("../src/slackops/bridge");
+    const { channelNameFor } = require("../src/slackops/share");
+    const { resolveDoc } = require("../src/slackops/api-client");
+    try {
+      const { user, project, docUrl } = await resolveDoc(url);
+      const channelName = channelNameFor({
+        user,
+        project,
+        test: opts.test === true,
+        channelOverride: opts.channel,
+      });
+      const result = await startBridge({
+        docUrl,
+        channelName,
+        stateDir: opts.stateDir,
+        intervalMs: opts.interval ? parseInt(opts.interval, 10) * 1000 : undefined,
+        archiveOnResolve: opts.archive !== false,
+        once: opts.once === true,
+        owner: opts.owner,
+        nudgeTo: opts.nudgeTo,
+        nudgeIntervalMs: opts.nudgeInterval ? parseInt(opts.nudgeInterval, 10) * 1000 : undefined,
+      });
+      if (opts.once && result) {
+        console.log(
+          `markup: cycle done: ${result.posted} posted to Slack, ${result.ingested} ingested${result.archived ? ", channel archived" : ""}`,
+        );
+      }
+    } catch (err) {
       console.error(`markup: ${err.message}`);
       process.exit(1);
     }
