@@ -29,6 +29,13 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Fixed
 
+- Keystrokes typed into MarkedUp's own text-entry surfaces (popover note
+  field, sidebar drawer) leaked to the host page's own keyboard handlers —
+  e.g. typing a space into an annotation note advanced a slide deck listening
+  for spacebar on `document`. Capture-phase listeners on `window` now stop
+  propagation for keydown/keyup/keypress originating in MarkedUp's own UI
+  before the host page ever sees them, without touching `preventDefault`, so
+  typing and native text-field shortcuts are unaffected.
 - `markup serve` could step up onto the dashboard's port (7780), so a third
   or later instance could squat the port the dashboard needs.
 - `markup dash` no longer silently drifts to a fallback port when 7780 is
