@@ -20,6 +20,8 @@ var Persist = (function () {
   var lastEtag = "";
   var selfEmail = "local@dev";
   var pollTimer = null;
+  var pendingWrites = 0; // in-flight remote mutations; the poll defers while > 0
+  var onRemoteChange = null; // startPolling's onChange, reused by resync()
 
   // ---- shared ---------------------------------------------------------------
 
@@ -162,7 +164,24 @@ var Persist = (function () {
       });
   }
 
+  // A failed write leaves the optimistic cache wrong, and a failed write
+  // never moves the server etag, so the regular poll would 304 past the
+  // damage forever. Force-refetch server truth and re-render: the phantom
+  // edit disappears (or the "deleted" note comes back) right next to the
+  // sync-failed toast that explains why.
+  function resync() {
+    if (!remote || pendingWrites > 0) return;
+    fetchAll(true)
+      .then(function () {
+        if (onRemoteChange) onRemoteChange();
+      })
+      .catch(function () {
+        /* offline; the next successful poll converges */
+      });
+  }
+
   function remotePut(anno) {
+    pendingWrites++;
     return uploadShotIfNeeded(anno)
       .then(function (ready) {
         return fetch(apiBase() + "/annotations/" + encodeURIComponent(ready.id), {
@@ -175,14 +194,19 @@ var Persist = (function () {
         if (!res.ok) throw new Error("save failed (" + res.status + ")");
         return res.json();
       })
-      .then(function (saved) {
-        adoptRecord(saved);
-        return saved;
-      })
-      .catch(function (err) {
-        warnSync(err);
-        return null;
-      });
+      .then(
+        function (saved) {
+          pendingWrites--;
+          adoptRecord(saved);
+          return saved;
+        },
+        function (err) {
+          pendingWrites--;
+          warnSync(err);
+          resync();
+          return null;
+        },
+      );
   }
 
   // POST a canvas reply onto an annotation's thread. The server stamps the
@@ -206,6 +230,7 @@ var Persist = (function () {
   }
 
   function remoteDelete(id) {
+    pendingWrites++;
     return fetch(apiBase() + "/annotations/" + encodeURIComponent(id), {
       method: "DELETE",
       headers: apiHeaders(false),
@@ -213,9 +238,18 @@ var Persist = (function () {
       .then(function (res) {
         if (!res.ok && res.status !== 404) throw new Error("delete failed (" + res.status + ")");
       })
-      .catch(function (err) {
-        warnSync(err);
-      });
+      .then(
+        function () {
+          pendingWrites--;
+        },
+        function (err) {
+          pendingWrites--;
+          warnSync(err);
+          // The optimistic splice already removed it locally; resync brings a
+          // note the server refused to delete straight back.
+          resync();
+        },
+      );
   }
 
   // Pull the shared set. Resolves true when the cache changed.
@@ -228,11 +262,17 @@ var Persist = (function () {
       return res.json().then(function (body) {
         lastEtag = body.etag || "";
         var incoming = Array.isArray(body.annotations) ? body.annotations : [];
-        var byId = {};
+        // Null-prototype lookups so an annotation id like "__proto__" can't
+        // pollute the object or shadow a real entry.
+        var byId = Object.create(null);
         cache.forEach(function (a) {
           byId[a.id] = a;
         });
-        cache = incoming.map(function (a) {
+        var incomingIds = Object.create(null);
+        incoming.forEach(function (a) {
+          incomingIds[a.id] = true;
+        });
+        var next = incoming.map(function (a) {
           var prev = byId[a.id];
           if (prev && prev.payload && prev.payload.pngDataURL) {
             a.payload = a.payload || {};
@@ -240,6 +280,14 @@ var Persist = (function () {
           }
           return a;
         });
+        // An authorless cache entry is a local creation whose PUT hasn't
+        // acked yet (the server stamps author on ack). Keep it, or a poll
+        // response racing the write would silently drop brand-new work; if
+        // the write later fails, resync() reconciles against server truth.
+        cache.forEach(function (a) {
+          if (!incomingIds[a.id] && !a.author) next.push(a);
+        });
+        cache = next;
         return true;
       });
     });
@@ -315,9 +363,14 @@ var Persist = (function () {
   function startPolling(sourceKey, onChange, opts) {
     if (!remote || pollTimer) return;
     opts = opts || {};
+    onRemoteChange = onChange;
     pingPresence(opts.onPresence);
     pollTimer = setInterval(function () {
       if (opts.isPaused && opts.isPaused()) return;
+      // Defer while a write is in flight: the etag hasn't moved yet, so
+      // fetching now could replace the cache with a list that predates the
+      // write. Nothing is lost; the next unpaused tick catches up.
+      if (pendingWrites > 0) return;
       fetchAll(false)
         .then(function (changed) {
           if (changed) onChange();

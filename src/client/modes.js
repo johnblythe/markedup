@@ -504,7 +504,14 @@ var Modes = (function () {
   function insideSpanMark(node) {
     var p = node.parentNode;
     while (p && p !== document.body) {
-      if (p.classList && p.classList.contains("markup-span")) return true;
+      if (
+        p.classList &&
+        (p.classList.contains("markup-span") ||
+          p.classList.contains("markup-highlight") ||
+          p.classList.contains("markup-strike"))
+      ) {
+        return true;
+      }
       p = p.parentNode;
     }
     return false;
@@ -697,11 +704,16 @@ var Modes = (function () {
         Popover.show({
           anchorRect: t.getBoundingClientRect(),
           initialText: anno.note,
-          canDelete: true,
+          readOnly: !ownsAnno(anno),
+          author: anno.author,
+          createdAt: anno.createdAt,
+          onReply: replyVia(anno),
+          canDelete: ownsAnno(anno),
           canAccept: true,
           onSave: function (note) {
             anno.note = note;
             Persist.upsertAnnotation(sourceKey, anno);
+            refresh();
             updateCount();
           },
           onAccept: function () {
@@ -764,11 +776,16 @@ var Modes = (function () {
         Popover.show({
           anchorRect: t.getBoundingClientRect(),
           initialText: anno.note,
-          canDelete: true,
+          readOnly: !ownsAnno(anno),
+          author: anno.author,
+          createdAt: anno.createdAt,
+          onReply: replyVia(anno),
+          canDelete: ownsAnno(anno),
           canAccept: true,
           onSave: function (note) {
             anno.note = note;
             Persist.upsertAnnotation(sourceKey, anno);
+            refresh();
             updateCount();
           },
           onAccept: function () {

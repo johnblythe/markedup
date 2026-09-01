@@ -107,6 +107,17 @@ test(
     assert.strictEqual(resolve.json.author, "john@ld.com");
     assert.strictEqual(resolve.json.lastEditedBy, "eng@ld.com");
 
+    // A cross-author PUT that keeps note/anchor/payload identical but tries
+    // to rewrite other fields (pinNum here) drives only status; everything
+    // else comes from the stored record.
+    const sneaky = await api(base, "PUT", "/api/local/report/annotations/anno-a1", {
+      body: { ...PIN, pinNum: 9 },
+      headers: { "X-Markup-User": "eng@ld.com" },
+    });
+    assert.strictEqual(sneaky.status, 200);
+    assert.strictEqual(sneaky.json.pinNum, 1, "non-author cannot renumber a pin");
+    assert.strictEqual(sneaky.json.state, "open", "the status transition still applies");
+
     const list2 = await api(base, "GET", "/api/local/report/annotations", {
       headers: { "If-None-Match": etag },
     });
@@ -146,9 +157,18 @@ test(
     });
     assert.strictEqual(r2.json.replies[1].via, "slack");
 
-    // DELETE tombstones: gone from GET, PUT refuses resurrection (410),
-    // replies to it 404.
-    const del = await api(base, "DELETE", "/api/local/report/annotations/anno-b1");
+    // DELETE is author-only: another identity (or none, which resolves to
+    // the local default) is refused and the note survives.
+    const crossDel = await api(base, "DELETE", "/api/local/report/annotations/anno-b1");
+    assert.strictEqual(crossDel.status, 403);
+    const survived = await api(base, "GET", "/api/local/report/annotations");
+    assert.strictEqual(survived.json.annotations.length, 1);
+
+    // The author's DELETE tombstones: gone from GET, PUT refuses
+    // resurrection (410), replies to it 404.
+    const del = await api(base, "DELETE", "/api/local/report/annotations/anno-b1", {
+      headers: { "X-Markup-User": "john@ld.com" },
+    });
     assert.strictEqual(del.status, 200);
     const list = await api(base, "GET", "/api/local/report/annotations");
     assert.strictEqual(list.json.annotations.length, 0);
@@ -160,6 +180,43 @@ test(
       body: { text: "hello?" },
     });
     assert.strictEqual(deadReply.status, 404);
+  }),
+);
+
+test(
+  "annotations API: create-time pin/rect number arbitration",
+  withServer({}, async ({ base }) => {
+    // Two viewers race inside one poll window and both propose pinNum 1;
+    // the second create is reassigned live-max + 1 and the corrected record
+    // returns in the response.
+    const first = await api(base, "PUT", "/api/local/report/annotations/anno-n1", {
+      body: { ...PIN, pinNum: 1 },
+      headers: { "X-Markup-User": "john@ld.com" },
+    });
+    assert.strictEqual(first.json.pinNum, 1);
+
+    const second = await api(base, "PUT", "/api/local/report/annotations/anno-n2", {
+      body: { ...PIN, pinNum: 1 },
+      headers: { "X-Markup-User": "eng@ld.com" },
+    });
+    assert.strictEqual(second.status, 200);
+    assert.strictEqual(second.json.pinNum, 2, "colliding pinNum is reassigned");
+
+    // A create with no number at all gets one minted too.
+    const unnumbered = await api(base, "PUT", "/api/local/report/annotations/anno-n3", {
+      body: { ...PIN, pinNum: undefined },
+      headers: { "X-Markup-User": "john@ld.com" },
+    });
+    assert.strictEqual(unnumbered.json.pinNum, 3);
+
+    // Updates by the author never renumber: john edits anno-n1's note and
+    // pinNum 1 stays put even though it "collides" with itself.
+    const edit = await api(base, "PUT", "/api/local/report/annotations/anno-n1", {
+      body: { ...PIN, pinNum: 1, note: "edited" },
+      headers: { "X-Markup-User": "john@ld.com" },
+    });
+    assert.strictEqual(edit.json.pinNum, 1);
+    assert.strictEqual(edit.json.note, "edited");
   }),
 );
 

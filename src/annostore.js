@@ -114,6 +114,27 @@ function createAnnotationStore(sourcePath) {
       ) {
         return err(403, `only ${existing.author} can edit this note`);
       }
+      // Status is the only field a non-author may drive. Rebuild the body
+      // from the stored record so a crafted PUT can't rewrite anything else
+      // (mode, pinNum, rectNum, shotUrl, anchor mirrors, …) while keeping
+      // the three compared fields byte-identical.
+      body = { ...existing, status: body.status || existing.status || "open" };
+    }
+
+    // Pin/rect numbers are minted client-side from each viewer's possibly
+    // stale cache, so two viewers can propose the same number inside one
+    // poll window. Arbitrate at create time: a taken (or missing) number is
+    // reassigned to live-max + 1, and the corrected record flows back to the
+    // creating client in this response.
+    if (!existing && (body.mode === "pin" || body.mode === "rect")) {
+      const field = body.mode === "pin" ? "pinNum" : "rectNum";
+      const taken = doc.annotations
+        .filter((a) => !a.deleted && a.mode === body.mode)
+        .map((a) => a[field])
+        .filter((n) => typeof n === "number");
+      if (typeof body[field] !== "number" || taken.includes(body[field])) {
+        body = { ...body, [field]: taken.reduce((m, n) => (n > m ? n : m), 0) + 1 };
+      }
     }
 
     const merged = {
@@ -154,6 +175,12 @@ function createAnnotationStore(sourcePath) {
     if (corrupt) return corruptError();
     const idx = doc.annotations.findIndex((a) => a.id === id);
     if (idx === -1) return err(404, "annotation not found");
+    // Deletion is destructive and tombstones forever, so it is author-only;
+    // the same contract the client UI enforces, now held server-side too.
+    const target = doc.annotations[idx];
+    if (target.author && target.author !== author) {
+      return err(403, `only ${target.author} can delete this note`);
+    }
     doc.annotations[idx] = {
       ...doc.annotations[idx],
       deleted: true,

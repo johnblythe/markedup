@@ -57,8 +57,10 @@ test("buildFeedbackMarkdown carries authors, states, replies, and shot assets", 
   assert.ok(markdown.includes("- ↳ eng (slack): fixed in rev 3"));
 
   // rect references the asset file and registers it for download
-  assert.ok(markdown.includes("![rect-1](audit.feedback-x.assets/rect-1.png)"));
-  assert.deepStrictEqual(assets, [{ filename: "rect-1.png", annoId: "anno-3" }]);
+  // The filename carries the id tail so two viewers' colliding rectNums
+  // can't overwrite each other's screenshots in the assets dir.
+  assert.ok(markdown.includes("![rect-1](audit.feedback-x.assets/rect-1-anno3.png)"));
+  assert.deepStrictEqual(assets, [{ filename: "rect-1-anno3.png", annoId: "anno-3" }]);
 });
 
 test("notes and replies cannot forge markdown structure in the bundle", () => {

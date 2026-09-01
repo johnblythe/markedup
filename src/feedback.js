@@ -55,14 +55,40 @@ function buildFeedbackMarkdown(annotations, opts) {
   lines.push("");
 
   const spans = annotations.filter((a) => a.mode === "span");
+  const highlights = annotations.filter((a) => a.mode === "highlight");
+  const strikes = annotations.filter((a) => a.mode === "strike");
   const pins = annotations.filter((a) => a.mode === "pin");
   const rects = annotations.filter((a) => a.mode === "rect");
+
+  function anchorClip(a) {
+    return inline(
+      (a.payload && a.payload.anchorText) || (a.anchor && a.anchor.anchorText) || "",
+    ).slice(0, 80);
+  }
 
   if (spans.length) {
     lines.push("## Span annotations");
     for (const a of spans) {
       const anchor = inline(a.payload && a.payload.anchorText ? a.payload.anchorText : "").slice(0, 80);
       lines.push(`- "${anchor}": ${inline(a.note) || "(no note)"}${annotationSuffix(a)}`);
+      lines.push(...replyLines(a, "  "));
+    }
+    lines.push("");
+  }
+
+  if (highlights.length) {
+    lines.push("## Highlights");
+    for (const a of highlights) {
+      lines.push(`- [HIGHLIGHT] "${anchorClip(a)}": ${inline(a.note) || "(no note)"}${annotationSuffix(a)}`);
+      lines.push(...replyLines(a, "  "));
+    }
+    lines.push("");
+  }
+
+  if (strikes.length) {
+    lines.push("## Strikethroughs (delete this text)");
+    for (const a of strikes) {
+      lines.push(`- [DELETE] "${anchorClip(a)}": ${inline(a.note) || "(no note)"}${annotationSuffix(a)}`);
       lines.push(...replyLines(a, "  "));
     }
     lines.push("");
@@ -96,7 +122,11 @@ function buildFeedbackMarkdown(annotations, opts) {
       lines.push(...replyLines(a, "  "));
       lines.push("");
       if (a.shotUrl) {
-        const filename = `rect-${num}.png`;
+        // rectNum is minted client-side and two viewers can collide on it, so
+        // the id tail keeps two "rect 3" screenshots from overwriting each
+        // other in the assets dir.
+        const idTail = String(a.id || "").replace(/[^a-z0-9]/gi, "").slice(-6) || "shot";
+        const filename = `rect-${num}-${idTail}.png`;
         lines.push(`  ![rect-${num}](${opts.assetsDirName || "assets"}/${filename})`);
         assets.push({ filename, annoId: a.id });
       } else {
@@ -106,7 +136,7 @@ function buildFeedbackMarkdown(annotations, opts) {
     }
   }
 
-  if (!spans.length && !pins.length && !rects.length) {
+  if (!spans.length && !highlights.length && !strikes.length && !pins.length && !rects.length) {
     lines.push("(no annotations)");
   }
 

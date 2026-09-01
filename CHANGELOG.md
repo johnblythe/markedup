@@ -164,6 +164,24 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Fixed
 
+- Cross-author rules are now enforced server-side, not just in the UI: DELETE
+  refuses to tombstone another author's note (403), and a cross-author PUT
+  can drive only the status transition; every other field (mode, pinNum,
+  shotUrl, anchor metadata) comes from the stored record (#3).
+- Highlight and strike popovers honor the cross-author read-only rules the
+  other modes already had, and both modes now appear in the `markup pull`
+  feedback bundle instead of being silently omitted from it (#3).
+- The remote poll defers while a write is in flight and keeps not-yet-acked
+  local annotations, so a poll tick can no longer erase a note that was just
+  created; a failed save or delete now resyncs to server truth next to its
+  error toast instead of leaving phantom state behind (#3).
+- Pin/rect numbers are arbitrated at create time by the annotations API, so
+  two reviewers in one poll window can't both mint "Pin 3"; pulled screenshot
+  filenames carry the annotation id so colliding rect numbers can't overwrite
+  each other's PNGs (#3).
+- Re-hydration skips text already inside highlight and strike marks (not just
+  comment spans), so overlapping annotations of different kinds no longer
+  nest-corrupt on reload (#3).
 - A text selection crossing an element boundary (bold run, link, line wrap)
   now survives reload: re-hydration searches the anchor element's combined
   text (with a whitespace-insensitive fallback) instead of one text node at a
