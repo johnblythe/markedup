@@ -155,6 +155,7 @@
     Modes.hydrate();
     updateCount();
 
+    installKeyboardIsolation();
     installPowerKeys(setActiveMode, sourceKey);
   }
 
@@ -164,6 +165,37 @@
     if (tag === "input" || tag === "textarea" || tag === "select") return true;
     if (el.isContentEditable) return true;
     return false;
+  }
+
+  function resolveEventOrigin(e) {
+    // composedPath()[0] is the true originating element even through shadow
+    // DOM; e.target gets retargeted to the shadow host in that case.
+    if (typeof e.composedPath === "function") {
+      var path = e.composedPath();
+      if (path && path.length) return path[0];
+    }
+    return e.target;
+  }
+
+  // Keep keystrokes typed into MarkedUp's own text-entry surfaces (popover,
+  // sidebar, ...) from leaking to the host page. Without this, a host page
+  // that listens for keydown on document (e.g. a slide deck advancing on
+  // space) reacts to every keystroke typed into an annotation note.
+  // Capture phase on window runs before the host's own (bubble-phase)
+  // listeners ever see the event, so stopPropagation here keeps it from
+  // reaching them. Never call preventDefault: typing, cursor movement, and
+  // native shortcuts inside the text box must keep working exactly as they
+  // do today.
+  function installKeyboardIsolation() {
+    function isolate(e) {
+      var origin = resolveEventOrigin(e);
+      if (isTypingTarget(origin) && Modes.isInsideMarkupUI(origin)) {
+        e.stopPropagation();
+      }
+    }
+    window.addEventListener("keydown", isolate, true);
+    window.addEventListener("keyup", isolate, true);
+    window.addEventListener("keypress", isolate, true);
   }
 
   function installPowerKeys(setActiveMode, sourceKey) {

@@ -383,7 +383,13 @@ var Modes = (function () {
 
   function isInsideMarkupUI(node) {
     while (node) {
-      if (node.id === "markup-toolbar" || node.id === "markup-popover" || node.id === "markup-toast") return true;
+      if (
+        node.id === "markup-toolbar" ||
+        node.id === "markup-popover" ||
+        node.id === "markup-toast" ||
+        node.id === "markup-sidebar"
+      )
+        return true;
       node = node.parentNode;
     }
     return false;
@@ -806,5 +812,6 @@ var Modes = (function () {
     getActive: getActive,
     hydrate: hydrate,
     refresh: refresh,
+    isInsideMarkupUI: isInsideMarkupUI,
   };
 })();
