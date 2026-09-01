@@ -1,5 +1,5 @@
-// Mode dispatcher + all three annotation mode handlers (span, pin, rect).
-// Single module so they share state cleanly.
+// Mode dispatcher + all annotation mode handlers (span, pin, rect, highlight,
+// strike). Single module so they share state cleanly.
 
 var Modes = (function () {
   var sourceKey = null;
@@ -14,10 +14,14 @@ var Modes = (function () {
   function init(key) {
     sourceKey = key;
     installSelectionListener();
+    installHighlightSelectionListener();
+    installStrikeSelectionListener();
     installShiftDragListener();
     installPinDelegate();
     installRectDelegate();
     installSpanClickDelegate();
+    installHighlightClickDelegate();
+    installStrikeClickDelegate();
     window.addEventListener("scroll", refreshPositions, { passive: true });
     window.addEventListener("resize", refreshPositions, { passive: true });
   }
@@ -36,7 +40,7 @@ var Modes = (function () {
     document.querySelectorAll(".markup-pin, .markup-rect").forEach(function (n) {
       n.remove();
     });
-    document.querySelectorAll("mark.markup-span").forEach(function (m) {
+    document.querySelectorAll("mark.markup-span, mark.markup-highlight, mark.markup-strike").forEach(function (m) {
       var parent = m.parentNode;
       while (m.firstChild) parent.insertBefore(m.firstChild, m);
       parent.removeChild(m);
@@ -89,6 +93,8 @@ var Modes = (function () {
       // status === "open"
       var rendered = false;
       if (anno.mode === "span") rendered = renderSpan(anno);
+      else if (anno.mode === "highlight") rendered = renderHighlight(anno);
+      else if (anno.mode === "strike") rendered = renderStrike(anno);
       else if (anno.mode === "pin") rendered = renderPin(anno);
       else if (anno.mode === "rect") {
         renderRect(anno);
@@ -240,9 +246,14 @@ var Modes = (function () {
       w: Math.round(rect.width),
       h: Math.round(rect.height),
     };
-    // For spans, update anchorText to the new element's text so re-hydration
-    // matches against current DOM.
-    if (reattachTarget.mode === "span" && reattachTarget.payload) {
+    // For spans (and the instant-creation span variants), update anchorText to
+    // the new element's text so re-hydration matches against current DOM.
+    if (
+      (reattachTarget.mode === "span" ||
+        reattachTarget.mode === "highlight" ||
+        reattachTarget.mode === "strike") &&
+      reattachTarget.payload
+    ) {
       reattachTarget.payload.anchorText = (targetEl.textContent || "").slice(0, 200);
     }
     Persist.upsertAnnotation(sourceKey, reattachTarget);
@@ -304,7 +315,7 @@ var Modes = (function () {
         // Wrap selection in a "pending" highlight so the user sees what they
         // grabbed while writing the note. Clears native selection by design —
         // pending highlight is the substitute.
-        var pendingMark = wrapRangeInPendingMark(range);
+        var pendingMark = wrapRangeInMark(range, "markup-span-pending");
         var anchorRect = pendingMark ? pendingMark.getBoundingClientRect() : rect;
         sel.removeAllRanges();
 
@@ -321,9 +332,9 @@ var Modes = (function () {
     });
   }
 
-  function wrapRangeInPendingMark(range) {
+  function wrapRangeInMark(range, className) {
     var mark = document.createElement("mark");
-    mark.className = "markup-span-pending";
+    mark.className = className;
     try {
       range.surroundContents(mark);
       return mark;
@@ -368,6 +379,29 @@ var Modes = (function () {
     updateCount();
   }
 
+  // Highlight/strike modes skip the popover entirely: the mark is already in
+  // its final class (set by wrapRangeInMark), so this just persists the
+  // annotation and tags the DOM node with its id.
+  function finalizeInstantMark(mark, anchorText, mode) {
+    if (!mark) return;
+    var anchorEl = mark.parentElement || document.body;
+    var fp = Fingerprint.elementFingerprint(anchorEl);
+    var anno = {
+      id: Persist.makeId(),
+      mode: mode,
+      createdAt: new Date().toISOString(),
+      note: "",
+      anchor: fp,
+      viewportRect: captureViewportRect(mark),
+      payload: {
+        anchorText: (anchorText || "").slice(0, 200),
+      },
+    };
+    mark.setAttribute("data-anno-id", anno.id);
+    Persist.upsertAnnotation(sourceKey, anno);
+    updateCount();
+  }
+
   function captureViewportRect(el) {
     if (!el || !el.getBoundingClientRect) return null;
     var r = el.getBoundingClientRect();
@@ -403,7 +437,8 @@ var Modes = (function () {
     return wrapFirstTextMatch(anchorEl, text, anno.id);
   }
 
-  function wrapFirstTextMatch(root, needle, annoId) {
+  function wrapFirstTextMatch(root, needle, annoId, className) {
+    var markClassName = className || "markup-span";
     var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
     var node;
     while ((node = walker.nextNode())) {
@@ -413,7 +448,7 @@ var Modes = (function () {
         range.setStart(node, idx);
         range.setEnd(node, idx + needle.length);
         var mark = document.createElement("mark");
-        mark.className = "markup-span";
+        mark.className = markClassName;
         mark.setAttribute("data-anno-id", annoId);
         try {
           range.surroundContents(mark);
@@ -440,7 +475,7 @@ var Modes = (function () {
         range2.setStart(node, Math.max(0, startIdx));
         range2.setEnd(node, Math.min(node.nodeValue.length, startIdx + needle.length));
         var mark2 = document.createElement("mark");
-        mark2.className = "markup-span";
+        mark2.className = markClassName;
         mark2.setAttribute("data-anno-id", annoId);
         try {
           range2.surroundContents(mark2);
@@ -459,6 +494,140 @@ var Modes = (function () {
       function (e) {
         var t = e.target;
         if (!t || !t.classList || !t.classList.contains("markup-span")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var id = t.getAttribute("data-anno-id");
+        var anno = findAnno(id);
+        if (!anno) return;
+        Popover.show({
+          anchorRect: t.getBoundingClientRect(),
+          initialText: anno.note,
+          canDelete: true,
+          canAccept: true,
+          onSave: function (note) {
+            anno.note = note;
+            Persist.upsertAnnotation(sourceKey, anno);
+            updateCount();
+          },
+          onAccept: function () {
+            acceptAnnotation(anno);
+          },
+          onDelete: function () {
+            removeAnnotation(anno);
+          },
+        });
+      },
+      true,
+    );
+  }
+
+  // ---- HIGHLIGHT MODE ---------------------------------------------------------
+  // Selecting text while this mode is active immediately creates a highlight
+  // annotation — no popover, no note required. Clicking an existing highlight
+  // reopens the popover so a note can be added or the annotation removed.
+
+  function installHighlightSelectionListener() {
+    document.addEventListener("mouseup", function (e) {
+      if (activeMode !== "highlight") return;
+      setTimeout(function () {
+        var sel = window.getSelection();
+        if (!sel || sel.isCollapsed) return;
+        if (Popover.isVisible()) return;
+        var range = sel.getRangeAt(0);
+        var rect = range.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return;
+        if (isInsideMarkupUI(range.commonAncestorContainer)) return;
+
+        var rangeText = sel.toString();
+        var mark = wrapRangeInMark(range, "markup-highlight");
+        sel.removeAllRanges();
+        if (!mark) return;
+        finalizeInstantMark(mark, rangeText, "highlight");
+      }, 0);
+    });
+  }
+
+  function renderHighlight(anno) {
+    var anchorEl = Fingerprint.resolveByPath(anno.anchor && anno.anchor.cssPath);
+    if (!anchorEl) return false;
+    var text = (anno.payload && anno.payload.anchorText) || "";
+    if (!text) return false;
+    return wrapFirstTextMatch(anchorEl, text, anno.id, "markup-highlight");
+  }
+
+  function installHighlightClickDelegate() {
+    document.addEventListener(
+      "click",
+      function (e) {
+        var t = e.target;
+        if (!t || !t.classList || !t.classList.contains("markup-highlight")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var id = t.getAttribute("data-anno-id");
+        var anno = findAnno(id);
+        if (!anno) return;
+        Popover.show({
+          anchorRect: t.getBoundingClientRect(),
+          initialText: anno.note,
+          canDelete: true,
+          canAccept: true,
+          onSave: function (note) {
+            anno.note = note;
+            Persist.upsertAnnotation(sourceKey, anno);
+            updateCount();
+          },
+          onAccept: function () {
+            acceptAnnotation(anno);
+          },
+          onDelete: function () {
+            removeAnnotation(anno);
+          },
+        });
+      },
+      true,
+    );
+  }
+
+  // ---- STRIKE MODE ------------------------------------------------------------
+  // Same instant-creation flow as highlight mode, but marks the span for
+  // deletion instead of emphasis. Clicking an existing strike reopens the
+  // popover so a reason can be added or the annotation removed.
+
+  function installStrikeSelectionListener() {
+    document.addEventListener("mouseup", function (e) {
+      if (activeMode !== "strike") return;
+      setTimeout(function () {
+        var sel = window.getSelection();
+        if (!sel || sel.isCollapsed) return;
+        if (Popover.isVisible()) return;
+        var range = sel.getRangeAt(0);
+        var rect = range.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return;
+        if (isInsideMarkupUI(range.commonAncestorContainer)) return;
+
+        var rangeText = sel.toString();
+        var mark = wrapRangeInMark(range, "markup-strike");
+        sel.removeAllRanges();
+        if (!mark) return;
+        finalizeInstantMark(mark, rangeText, "strike");
+      }, 0);
+    });
+  }
+
+  function renderStrike(anno) {
+    var anchorEl = Fingerprint.resolveByPath(anno.anchor && anno.anchor.cssPath);
+    if (!anchorEl) return false;
+    var text = (anno.payload && anno.payload.anchorText) || "";
+    if (!text) return false;
+    return wrapFirstTextMatch(anchorEl, text, anno.id, "markup-strike");
+  }
+
+  function installStrikeClickDelegate() {
+    document.addEventListener(
+      "click",
+      function (e) {
+        var t = e.target;
+        if (!t || !t.classList || !t.classList.contains("markup-strike")) return;
         e.preventDefault();
         e.stopPropagation();
         var id = t.getAttribute("data-anno-id");

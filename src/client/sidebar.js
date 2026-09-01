@@ -58,7 +58,16 @@ var Sidebar = (function () {
   function modeBadge(mode) {
     var span = document.createElement("span");
     span.className = "markup-sidebar-mode markup-sidebar-mode-" + mode;
-    span.textContent = mode === "span" ? "TEXT" : mode === "pin" ? "PIN" : "RECT";
+    span.textContent =
+      mode === "span"
+        ? "TEXT"
+        : mode === "highlight"
+          ? "HIGHLIGHT"
+          : mode === "strike"
+            ? "STRIKE"
+            : mode === "pin"
+              ? "PIN"
+              : "RECT";
     return span;
   }
 

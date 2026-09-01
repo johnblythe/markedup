@@ -43,6 +43,23 @@
     );
     toolbar.appendChild(row1);
 
+    var row1b = makeRow();
+    row1b.appendChild(
+      makeButton({
+        text: "Highlight · H",
+        title: "Highlight text, no note needed (press H)",
+        mode: "highlight",
+      }),
+    );
+    row1b.appendChild(
+      makeButton({
+        text: "Strike · X",
+        title: "Strikethrough text for removal (press X)",
+        mode: "strike",
+      }),
+    );
+    toolbar.appendChild(row1b);
+
     var row2 = makeRow();
     row2.appendChild(
       makeButton({
@@ -137,7 +154,7 @@
       document.querySelectorAll(".markup-pin, .markup-rect").forEach(function (n) {
         n.remove();
       });
-      document.querySelectorAll("mark.markup-span").forEach(function (m) {
+      document.querySelectorAll("mark.markup-span, mark.markup-highlight, mark.markup-strike").forEach(function (m) {
         var parent = m.parentNode;
         while (m.firstChild) parent.insertBefore(m.firstChild, m);
         parent.removeChild(m);
@@ -218,6 +235,14 @@
         case "r":
           e.preventDefault();
           setActiveMode(Modes.getActive() === "rect" ? null : "rect");
+          break;
+        case "h":
+          e.preventDefault();
+          setActiveMode(Modes.getActive() === "highlight" ? null : "highlight");
+          break;
+        case "x":
+          e.preventDefault();
+          setActiveMode(Modes.getActive() === "strike" ? null : "strike");
           break;
         case "c":
           e.preventDefault();
