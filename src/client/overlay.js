@@ -171,7 +171,7 @@
     modeWrap.className = "markup-strip-mode markup-toolbar-row-anchor";
     var modeBtn = makeButton({
       action: "mode-more",
-      title: "Choose annotation mode (T / P / R)",
+      title: "Choose annotation mode (T / P / R / H / X)",
       className: "markup-strip-mode-btn",
     });
     modeBtn.setAttribute("data-mode-label", "");
@@ -191,6 +191,22 @@
         text: "Rect · R",
         title: "Draw a rectangle (or shift-drag anywhere)",
         mode: "rect",
+        className: "markup-strip-seg",
+      }),
+    );
+    modeMenu.appendChild(
+      makeButton({
+        text: "Highlight · H",
+        title: "Highlight text, no note needed",
+        mode: "highlight",
+        className: "markup-strip-seg",
+      }),
+    );
+    modeMenu.appendChild(
+      makeButton({
+        text: "Strike · X",
+        title: "Strikethrough text for removal",
+        mode: "strike",
         className: "markup-strip-seg",
       }),
     );
@@ -314,7 +330,7 @@
       }
     }
 
-    var MODE_NAMES = { span: "Text", pin: "Pin", rect: "Rect" };
+    var MODE_NAMES = { span: "Text", pin: "Pin", rect: "Rect", highlight: "Highlight", strike: "Strike" };
     function setActiveMode(mode) {
       Modes.setActive(mode);
       modeButtons.forEach(function (b) {
@@ -643,6 +659,26 @@
           hint: "R",
           run: function () {
             setActiveMode(Modes.getActive() === "rect" ? null : "rect");
+          },
+        },
+        {
+          id: "mode-highlight",
+          group: "Modes",
+          label: "Highlight",
+          icon: "▉",
+          hint: "H",
+          run: function () {
+            setActiveMode(Modes.getActive() === "highlight" ? null : "highlight");
+          },
+        },
+        {
+          id: "mode-strike",
+          group: "Modes",
+          label: "Strike",
+          icon: "S̶",
+          hint: "X",
+          run: function () {
+            setActiveMode(Modes.getActive() === "strike" ? null : "strike");
           },
         },
         {

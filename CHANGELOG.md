@@ -17,32 +17,6 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
   asset refresh; SSO publishers skip the asset step with a notice. The
   canvas URL defaults to the shared instance, so a coworker's setup is
   `brew install cloudflared` + `markup login`, done.
-
-### Changed
-
-- Review drawer redesigned for at-a-glance triage: flat hairline-divided rows
-  instead of bordered cards; author avatar + name in a deterministic
-  per-author color with a relative timestamp; the anchored quote sits above
-  the note and is the jump affordance (click it to go to the spot), replacing
-  the "Where it is/was" buttons; lifecycle chips removed (the section already
-  says the status; pending rows still say why, e.g. "Moved — re-attach");
-  actions are quiet chips with Resolve alone tinted and Remove set apart on
-  the right; reply threads render as plain lines behind a thin rule.
-- Strip controls share one explicit height; sizing no longer drifts with each
-  control's font size and padding.
-
-### Fixed
-
-- A text selection crossing an element boundary (bold run, link, line wrap)
-  now survives reload: re-hydration searches the anchor element's combined
-  text (with a whitespace-insensitive fallback) instead of one text node at a
-  time, so the highlight re-renders instead of vanishing.
-- Jumping to a note's spot works: smooth `window.scrollTo` is silently inert
-  on some wrapped docs, so jumps scroll instantly (with the ghost flash
-  marking the landing).
-
-### Added
-
 - Two-persona local sandbox: `markup serve <file> --multiplayer` prints two
   ready-to-open URLs (`?persona=jb`, `?persona=jb2`) so one person can review
   from two browser tabs as two identities. `?persona=` is the identity param
@@ -66,74 +40,12 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 - Human status labels in the drawer and popover (display only; stored values
   unchanged): "Open", "Needs another look", "Resolved", and "Moved —
   re-attach" for a note whose anchor moved.
-
 - Shared-canvas badge in the overlay chrome (remote mode only): names the
   doc, carries a live "N new" count of other reviewers' notes arrived since
   you last opened the review drawer, and expands a help panel explaining the
   shared workflow and how to hand the review to an agent. Solo mode is
   unchanged. The "new" count is tracked per viewer in that viewer's own
   localStorage and degrades gracefully when the store is blocked.
-
-### Changed
-
-- Another reviewer's note opens read-only: the popover shows their words with
-  author and time, and offers exactly the actions that work — Resolve, Reply
-  (jumps to the drawer composer), Close. The drawer likewise hides Remove and
-  Re-attach on notes you don't own. Your own notes keep the full editor. Solo
-  mode is unchanged.
-- Popover buttons regrouped: Remove sits alone at the far left, and the
-  action group (Resolve · Cancel · Save) holds the right edge with the
-  primary always rightmost.
-- The "⋯" export options open as a compact popup anchored to the button —
-  only the two secondary items — closing on outside click or Esc.
-- One floating surface: the shared-canvas badge (name, N-new pill, presence,
-  ?) is the palette's header instead of a box within it; the palette docks
-  into the review drawer while the drawer is open and floats again when it
-  closes; the badge panel, ⋯ menu, and popover are mutually exclusive; Esc
-  dismisses one surface at a time (popover → re-attach → composer → popup →
-  drawer), and now closes the reply composer from anywhere on the page.
-
-### Fixed
-
-- Per-viewer "seen" tracking is now scoped by identity, not just the doc, so
-  two personas sharing one browser's localStorage keep independent "N new"
-  counts — one persona opening the drawer no longer marks notes seen for the
-  other.
-- Text-span annotations no longer detach spuriously on a shared canvas.
-  loadAnnotations now hands out deep copies, so an in-place re-anchor or
-  status change on one annotation can't corrupt another through a shared
-  object reference; a failed re-render in remote mode keeps the note open and
-  visible instead of persisting status=pending to the shared doc (which had
-  detached a reviewer's comment for everyone); and two spans in the same
-  element re-anchor independently.
-- The review drawer quotes a span's actual selected text, not its parent
-  element's text — two spans in one paragraph no longer show identical,
-  mislabeled quotes.
-- A reviewer's own new or edited annotation appears in the review drawer
-  immediately; the ~10s poll cadence is only for other reviewers' changes.
-- Escape closes the review drawer when it's open (after any popover or active
-  re-attach, which still take Escape first).
-- On a shared canvas the "Disk" export downloads a self-contained markdown
-  file with inlined screenshots instead of calling a /export route the Worker
-  doesn't serve; the tooltip points to `markup pull <url>` for the full
-  bundle with separate PNG files. Local serve keeps its existing behavior.
-
-- Shared-canvas destructive ops are scoped to your own annotations: deleting
-  someone else's note is refused (deletion tombstones the id forever), and
-  "Clear all" in remote mode clears only yours and says so.
-- The local annotations store writes atomically (temp file + rename) and
-  refuses to touch a corrupt annotations file — a parse failure is loud and
-  returns 500 instead of silently reading as empty and clobbering the review
-  on the next write.
-- `markup serve --multiplayer` refuses to start when another live process
-  already serves the same file in multiplayer mode (two processes would
-  interleave writes on one annotations JSON).
-- The feedback bundle flattens notes, quotes, and replies before
-  interpolating them into markdown, so a malicious note can't forge headings
-  or code fences aimed at the agent consuming the bundle.
-
-### Added
-
 - Highlighter mode (LD-171): toolbar button + `H` shortcut. Selecting a text
   span while active creates a highlight annotation immediately, no popover.
   Renders as a translucent yellow swipe over the span; clicking an existing
@@ -187,7 +99,6 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
   channel so a landed-but-timed-out call never double-posts; canvas-deleted
   annotations are pruned; CLI args are positional-safe; `--channel` is
   slugified; bridge registry keys derive from the channel name.
-
 - `markup <file.html>` as shorthand for `markup serve <file.html>`, flags
   included (`markup brief.html --port 9000`). The `serve` word is implied only
   when the first argument is not a known subcommand and an `.html` argument is
@@ -208,6 +119,16 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Changed
 
+- Review drawer redesigned for at-a-glance triage: flat hairline-divided rows
+  instead of bordered cards; author avatar + name in a deterministic
+  per-author color with a relative timestamp; the anchored quote sits above
+  the note and is the jump affordance (click it to go to the spot), replacing
+  the "Where it is/was" buttons; lifecycle chips removed (the section already
+  says the status; pending rows still say why, e.g. "Moved — re-attach");
+  actions are quiet chips with Resolve alone tinted and Remove set apart on
+  the right; reply threads render as plain lines behind a thin rule.
+- Strip controls share one explicit height; sizing no longer drifts with each
+  control's font size and padding.
 - Another reviewer's note opens read-only: the popover shows their words with
   author and time, and offers exactly the actions that work — Resolve, Reply
   (jumps to the drawer composer), Close. The drawer likewise hides Remove and
@@ -237,9 +158,54 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
   falling through to the drawer. The palette module itself ships
   separately; the strip feature-detects it and degrades to a no-op ⌘K if
   it isn't present.
+- The strip's mode menu and the ⌘K palette include Highlight (H) and
+  Strike (X), restoring the visible affordance those modes lost when the
+  stacked toolbar buttons became the compact strip (#3).
 
 ### Fixed
 
+- A text selection crossing an element boundary (bold run, link, line wrap)
+  now survives reload: re-hydration searches the anchor element's combined
+  text (with a whitespace-insensitive fallback) instead of one text node at a
+  time, so the highlight re-renders instead of vanishing.
+- Jumping to a note's spot works: smooth `window.scrollTo` is silently inert
+  on some wrapped docs, so jumps scroll instantly (with the ghost flash
+  marking the landing).
+- Per-viewer "seen" tracking is now scoped by identity, not just the doc, so
+  two personas sharing one browser's localStorage keep independent "N new"
+  counts — one persona opening the drawer no longer marks notes seen for the
+  other.
+- Text-span annotations no longer detach spuriously on a shared canvas.
+  loadAnnotations now hands out deep copies, so an in-place re-anchor or
+  status change on one annotation can't corrupt another through a shared
+  object reference; a failed re-render in remote mode keeps the note open and
+  visible instead of persisting status=pending to the shared doc (which had
+  detached a reviewer's comment for everyone); and two spans in the same
+  element re-anchor independently.
+- The review drawer quotes a span's actual selected text, not its parent
+  element's text — two spans in one paragraph no longer show identical,
+  mislabeled quotes.
+- A reviewer's own new or edited annotation appears in the review drawer
+  immediately; the ~10s poll cadence is only for other reviewers' changes.
+- Escape closes the review drawer when it's open (after any popover or active
+  re-attach, which still take Escape first).
+- On a shared canvas the "Disk" export downloads a self-contained markdown
+  file with inlined screenshots instead of calling a /export route the Worker
+  doesn't serve; the tooltip points to `markup pull <url>` for the full
+  bundle with separate PNG files. Local serve keeps its existing behavior.
+- Shared-canvas destructive ops are scoped to your own annotations: deleting
+  someone else's note is refused (deletion tombstones the id forever), and
+  "Clear all" in remote mode clears only yours and says so.
+- The local annotations store writes atomically (temp file + rename) and
+  refuses to touch a corrupt annotations file — a parse failure is loud and
+  returns 500 instead of silently reading as empty and clobbering the review
+  on the next write.
+- `markup serve --multiplayer` refuses to start when another live process
+  already serves the same file in multiplayer mode (two processes would
+  interleave writes on one annotations JSON).
+- The feedback bundle flattens notes, quotes, and replies before
+  interpolating them into markdown, so a malicious note can't forge headings
+  or code fences aimed at the agent consuming the bundle.
 - Keystrokes typed into MarkedUp's own text-entry surfaces (popover note
   field, sidebar drawer) leaked to the host page's own keyboard handlers —
   e.g. typing a space into an annotation note advanced a slide deck listening
@@ -255,6 +221,11 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
   return 200), so a served artifact on the dashboard port could masquerade
   as the dashboard. `dash` now probes `/api/instances`, a dashboard-only
   route.
+- The review drawer shows author attribution only on a shared canvas: solo
+  rows start at the timestamp instead of rendering "?" avatar and name
+  chips. On a shared canvas, a note with no author gets a neutral
+  "unattributed" look instead of a hashed identity color that dressed it
+  up as a real teammate (#3).
 
 ## [0.1.2] - 2026-06-22
 
