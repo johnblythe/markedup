@@ -9,6 +9,16 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Added
 
+- Highlighter mode (LD-171): toolbar button + `H` shortcut. Selecting a text
+  span while active creates a highlight annotation immediately, no popover.
+  Renders as a translucent yellow swipe over the span; clicking an existing
+  highlight reopens the popover to add a note or delete it. Exports as
+  `[HIGHLIGHT] "<span text>"` in both the clipboard and disk bundles.
+- Red strikethrough mode (LD-172): toolbar button + `X` shortcut. Selecting a
+  text span while active creates a delete annotation immediately, no
+  popover. Renders as a red strikethrough; clicking an existing strike
+  reopens the popover to add a reason or remove it. Exports as
+  `[DELETE] "<span text>"` in both the clipboard and disk bundles.
 - `markup <file.html>` as shorthand for `markup serve <file.html>`, flags
   included (`markup brief.html --port 9000`). The `serve` word is implied only
   when the first argument is not a known subcommand and an `.html` argument is

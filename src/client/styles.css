@@ -164,6 +164,41 @@ mark.markup-span-pending {
   -webkit-box-decoration-break: clone;
 }
 
+/* Highlighter mode: instant, no-note emphasis. Yellow, deliberately distinct
+ * from the orange comment-span color above. */
+mark.markup-highlight {
+  background: rgba(255, 235, 59, 0.45);
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+mark.markup-highlight:hover {
+  background: rgba(255, 235, 59, 0.7);
+}
+
+/* Strike mode: instant "delete this text" marker. Red line-through with a
+ * faint red-tinted background so it reads unmistakably as removal. */
+mark.markup-strike {
+  background: rgba(231, 76, 60, 0.12);
+  color: inherit;
+  text-decoration: line-through;
+  text-decoration-color: #e74c3c;
+  text-decoration-thickness: 2px;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+mark.markup-strike:hover {
+  background: rgba(231, 76, 60, 0.22);
+}
+
 .markup-pin {
   position: absolute;
   z-index: 99998;
@@ -272,6 +307,8 @@ mark.markup-span-pending {
 .markup-rect,
 mark.markup-span,
 mark.markup-span-pending,
+mark.markup-highlight,
+mark.markup-strike,
 #markup-sidebar a,
 #markup-sidebar .markup-sidebar-thumb {
   cursor: pointer !important;
@@ -506,6 +543,12 @@ mark.markup-span-pending,
 }
 .markup-sidebar-mode-span {
   background: #b07a1a;
+}
+.markup-sidebar-mode-highlight {
+  background: #a89100;
+}
+.markup-sidebar-mode-strike {
+  background: #c0392b;
 }
 .markup-sidebar-mode-pin {
   background: var(--markup-accent);

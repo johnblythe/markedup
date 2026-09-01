@@ -99,6 +99,12 @@ var ExportClient = (function () {
     var spans = list.filter(function (a) {
       return a.mode === "span";
     });
+    var highlights = list.filter(function (a) {
+      return a.mode === "highlight";
+    });
+    var strikes = list.filter(function (a) {
+      return a.mode === "strike";
+    });
     var pins = list.filter(function (a) {
       return a.mode === "pin";
     });
@@ -112,6 +118,28 @@ var ExportClient = (function () {
         var anchor = a.payload && a.payload.anchorText ? a.payload.anchorText : "";
         lines.push(
           '- "' + (anchor.slice(0, 80) || "") + '": ' + (a.note || "(no note)"),
+        );
+      });
+      lines.push("");
+    }
+
+    if (highlights.length) {
+      lines.push("## Highlight annotations");
+      highlights.forEach(function (a) {
+        var anchor = a.payload && a.payload.anchorText ? a.payload.anchorText : "";
+        lines.push(
+          '- [HIGHLIGHT] "' + (anchor.slice(0, 80) || "") + '": ' + (a.note || "(no note)"),
+        );
+      });
+      lines.push("");
+    }
+
+    if (strikes.length) {
+      lines.push("## Strike annotations");
+      strikes.forEach(function (a) {
+        var anchor = a.payload && a.payload.anchorText ? a.payload.anchorText : "";
+        lines.push(
+          '- [DELETE] "' + (anchor.slice(0, 80) || "") + '": ' + (a.note || "(no note)"),
         );
       });
       lines.push("");
@@ -175,7 +203,7 @@ var ExportClient = (function () {
       });
     }
 
-    if (!spans.length && !pins.length && !rects.length) {
+    if (!spans.length && !highlights.length && !strikes.length && !pins.length && !rects.length) {
       lines.push("(no annotations)");
     }
 

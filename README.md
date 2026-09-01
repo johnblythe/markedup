@@ -75,9 +75,13 @@ for `--reclaim` and `--port` when something else is squatting on 7780.
 
 ## Annotation modes
 
-- **Text** — select any text, leave a note. Persists as a highlighted span.
-- **Pin** — click any element, drop a numbered pin with a note.
-- **Rect** — shift-drag (or toggle Rect mode) to draw a rectangle; tool screenshots that region and attaches a note.
+- **Text** (`T`) — select any text, leave a note. Persists as a highlighted span.
+- **Highlight** (`H`) — select any text; it's highlighted instantly, no note required. Click an existing highlight to add a note or delete it. Tells the agent: add emphasis here, change nothing else.
+- **Strike** (`X`) — select any text; it's struck through instantly, no note required. Click an existing strike to add a reason or remove it. Tells the agent: delete this exact text and repair the surrounding grammar/punctuation.
+- **Pin** (`P`) — click any element, drop a numbered pin with a note.
+- **Rect** (`R`) — shift-drag (or toggle Rect mode) to draw a rectangle; tool screenshots that region and attaches a note.
+
+Shortcuts are ignored while typing in a text field or the note popover. `Esc` clears the active mode.
 
 ![A note popover open on a pinned table row, with Remove, Accept, Cancel, and Save buttons](docs/assets/popover.png)
 
@@ -92,10 +96,16 @@ What the agent gets back (excerpt from a real export of the sample report):
 
 ```markdown
 # Feedback: demo.html
-Total annotations: 3
+Total annotations: 5
 
 ## Span annotations
 - "W10 dips on the release freeze": explain the release freeze inline — readers won't know what froze
+
+## Highlight annotations
+- [HIGHLIGHT] "conversion rate improved 12% week over week": (no note)
+
+## Strike annotations
+- [DELETE] "as previously mentioned in the earlier section": redundant, already covered above
 
 ## Pin annotations
 - Pin ① on `td` (body > div:nth-of-type(1) > table > tbody > tr:nth-of-type(3) > td:nth-of-type(2)) — text: "At risk": link the rate-limit decision doc here
