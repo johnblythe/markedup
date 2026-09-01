@@ -375,6 +375,29 @@ async function startServer(filePath, opts = {}) {
   registry.installLifecycle(actualPort);
   server.once("close", () => registry.unregister(actualPort));
 
+  // The pre-bind clash check above races: two processes can both pass it
+  // before either registers, then interleave writes on one annotations JSON.
+  // Re-check now that this instance is registered. Both racers see each
+  // other here, and the later registrant (tie-broken by port) backs out.
+  if (multiplayer) {
+    const mine = registry.find(actualPort);
+    const myStart = Date.parse((mine && mine.startedAt) || "") || 0;
+    const winner = registry
+      .list()
+      .filter((it) => it.multiplayer && it.sourcePath === sourcePath && it.pid !== process.pid)
+      .find((rival) => {
+        const rivalStart = Date.parse(rival.startedAt || "") || 0;
+        return rivalStart !== myStart ? rivalStart < myStart : rival.port < actualPort;
+      });
+    if (winner) {
+      registry.unregister(actualPort);
+      server.close();
+      throw new Error(
+        `${sourceName} is already served in multiplayer mode by pid ${winner.pid} on port ${winner.port} — annotate there or stop it first`,
+      );
+    }
+  }
+
   if (autoOpen) {
     try {
       const open = (await import("open")).default;

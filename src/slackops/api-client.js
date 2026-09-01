@@ -6,6 +6,11 @@
 
 const FETCH_TIMEOUT_MS = 10_000;
 
+// Same config seam as `markup publish`/`pull` (env vars, then LDPUB_ENV_FILE,
+// then ~/code/ldpub/.env), so share/bridge never diverge from the documented
+// credential chain.
+const { loadConfig } = require("../publish");
+
 // A shared doc URL looks like {origin}/{user}/{project}/[index.html]. The API
 // lives on the same origin.
 function parseDocUrl(docUrl) {
@@ -29,13 +34,13 @@ function parseDocUrl(docUrl) {
 
 // The doc URL is operator-supplied, so it controls where the bridge sends
 // requests. Only two origins are ever contacted: localhost (stub / local
-// serve) and the configured ldpub origin from LDPUB_URL (https only). The
-// service token is attached only to the latter — never to an origin that
-// merely appeared in a pasted URL.
+// serve) and the configured ldpub origin (https only). The service token is
+// attached only to the latter, never to an origin that merely appeared in a
+// pasted URL.
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 function configuredRemoteOrigin() {
-  const raw = process.env.LDPUB_URL;
+  const raw = loadConfig().url;
   if (!raw) return null;
   try {
     const url = new URL(raw);
@@ -157,14 +162,10 @@ function authHeaders(asUser, apiBase) {
   const headers = {};
   if (asUser) headers["X-Markup-User"] = asUser;
   const remote = configuredRemoteOrigin();
-  if (
-    remote &&
-    apiBase === remote &&
-    process.env.LDPUB_CLIENT_ID &&
-    process.env.LDPUB_CLIENT_SECRET
-  ) {
-    headers["CF-Access-Client-Id"] = process.env.LDPUB_CLIENT_ID;
-    headers["CF-Access-Client-Secret"] = process.env.LDPUB_CLIENT_SECRET;
+  const config = loadConfig();
+  if (remote && apiBase === remote && config.clientId && config.clientSecret) {
+    headers["CF-Access-Client-Id"] = config.clientId;
+    headers["CF-Access-Client-Secret"] = config.clientSecret;
   }
   return headers;
 }
