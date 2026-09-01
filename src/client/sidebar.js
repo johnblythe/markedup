@@ -53,10 +53,19 @@ var Sidebar = (function () {
   function avatarEl(author) {
     var el = document.createElement("span");
     el.className = "markup-sidebar-avatar";
-    el.textContent = shortName(author).slice(0, 2);
-    el.style.background = "hsl(" + authorHue(author) + ", 55%, 91%)";
-    el.style.color = authorColor(author);
-    el.setAttribute("title", author || "");
+    if (author) {
+      el.textContent = shortName(author).slice(0, 2);
+      el.style.background = "hsl(" + authorHue(author) + ", 55%, 91%)";
+      el.style.color = authorColor(author);
+      el.setAttribute("title", author);
+    } else {
+      // No author on a shared canvas: the note predates attribution or was
+      // imported from a solo session. Neutral gray, never an identity hue —
+      // hashing "?" into the wheel would dress it up as a real teammate.
+      el.textContent = "?";
+      el.classList.add("markup-sidebar-avatar-unknown");
+      el.setAttribute("title", "Unattributed note");
+    }
     return el;
   }
 
@@ -159,9 +168,15 @@ var Sidebar = (function () {
 
         var who = document.createElement("span");
         who.className = "markup-sidebar-reply-author";
-        who.textContent = shortName(r.author);
-        who.style.color = authorColor(r.author);
-        who.setAttribute("title", r.author || "");
+        if (r.author) {
+          who.textContent = shortName(r.author);
+          who.style.color = authorColor(r.author);
+          who.setAttribute("title", r.author);
+        } else {
+          who.textContent = "unknown";
+          who.classList.add("markup-sidebar-name-unknown");
+          who.setAttribute("title", "Unattributed reply");
+        }
         line.appendChild(who);
 
         var when = document.createElement("span");
@@ -289,13 +304,23 @@ var Sidebar = (function () {
     // kind token. Lifecycle chips are gone — the section already says status.
     var top = document.createElement("div");
     top.className = "markup-sidebar-entry-top";
-    top.appendChild(avatarEl(anno.author));
-    var name = document.createElement("span");
-    name.className = "markup-sidebar-name";
-    name.textContent = shortName(anno.author);
-    name.style.color = authorColor(anno.author);
-    name.setAttribute("title", anno.author || "");
-    top.appendChild(name);
+    // Attribution is a shared-canvas concept. Solo mode has exactly one
+    // author (you), so who-chips would be noise — the row starts at the time.
+    if (Persist.isRemote && Persist.isRemote()) {
+      top.appendChild(avatarEl(anno.author));
+      var name = document.createElement("span");
+      name.className = "markup-sidebar-name";
+      if (anno.author) {
+        name.textContent = shortName(anno.author);
+        name.style.color = authorColor(anno.author);
+        name.setAttribute("title", anno.author);
+      } else {
+        name.textContent = "unknown";
+        name.classList.add("markup-sidebar-name-unknown");
+        name.setAttribute("title", "Unattributed note");
+      }
+      top.appendChild(name);
+    }
     if (sessionNewIds[anno.id]) {
       var dot = document.createElement("span");
       dot.className = "markup-sidebar-new-dot";

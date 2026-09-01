@@ -538,6 +538,18 @@ mark.markup-strike,
   font-size: 12px;
   font-weight: 600;
 }
+/* Unattributed note on a shared canvas: neutral, deliberately not an identity hue. */
+.markup-sidebar-avatar-unknown {
+  background: var(--markup-hover);
+  color: var(--markup-muted);
+  border: 1px dashed var(--markup-border);
+  box-sizing: border-box;
+}
+.markup-sidebar-name-unknown {
+  color: var(--markup-muted);
+  font-weight: 500;
+  font-style: italic;
+}
 .markup-sidebar-new-dot {
   width: 6px;
   height: 6px;
