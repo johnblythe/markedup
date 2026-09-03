@@ -7,6 +7,7 @@ const { writeExportBundle } = require("./export");
 const { createAnnotationStore } = require("./annostore");
 const registry = require("./registry");
 const { SERVE_PORT, RESERVED_PORTS, isReserved, listenWithFallback } = require("./ports");
+const { slugFromSourceName } = require("./publish");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -101,15 +102,15 @@ async function startServer(filePath, opts = {}) {
   // outright is an error; walking into it during fallback just steps over it.
   if (explicitPort && isReserved(port) && !opts.allowReserved) {
     throw new Error(
-      `port ${port} is reserved for the markup dashboard (\`markup dash\`) — pick another with --port`,
+      `port ${port} is reserved for the markup dashboard (\`markup dash\`); pick another with --port`,
     );
   }
   const autoOpen = opts.autoOpen !== false;
   // Multiplayer mode: annotations flow through the local annotations API
   // (shared JSON next to the source file) instead of each browser's
-  // localStorage. The API itself is always mounted — it is the contract stub
-  // other tooling (the Slack bridge) tests against — but the overlay only
-  // uses it when the page was served with multiplayer on.
+  // localStorage. The API itself is always mounted (it is the contract stub
+  // other tooling, like the Slack bridge, tests against), but the overlay
+  // only uses it when the page was served with multiplayer on.
   const multiplayer = opts.multiplayer === true;
 
   // Two multiplayer processes on one file would interleave read-modify-write
@@ -123,16 +124,11 @@ async function startServer(filePath, opts = {}) {
       );
     if (clash) {
       throw new Error(
-        `${sourceName} is already served in multiplayer mode by pid ${clash.pid} on port ${clash.port} — annotate there or stop it first`,
+        `${sourceName} is already served in multiplayer mode by pid ${clash.pid} on port ${clash.port}; annotate there or stop it first`,
       );
     }
   }
-  const projectSlug = sourceName
-    .replace(/\.[^.]+$/, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "") || "artifact";
+  const projectSlug = slugFromSourceName(sourceName);
   const annoStore = createAnnotationStore(sourcePath);
   // Presence heartbeats, identity -> last-seen ISO. In-memory on purpose.
   const presenceViewers = new Map();
@@ -172,7 +168,7 @@ async function startServer(filePath, opts = {}) {
     const m = pathname.match(
       /^\/api\/([^/]+)\/([^/]+)\/(annotations|shots|presence)(?:\/([^/]+))?(?:\/(replies))?$/,
     );
-    if (!m) return null; // not an API path — fall through to static serving
+    if (!m) return null; // not an API path, fall through to static serving
     const [, user, project, section, item, repliesSeg] = m;
 
     // Presence heartbeat (in-memory; the stub restarts fresh, which is fine
@@ -259,9 +255,14 @@ async function startServer(filePath, opts = {}) {
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, `http://localhost:${port}`);
-      const pathname = decodeURIComponent(url.pathname);
+      let pathname;
+      try {
+        pathname = decodeURIComponent(url.pathname);
+      } catch (_e) {
+        return sendError(res, 400, "malformed request path");
+      }
 
-      // Annotations API (multiplayer contract stub) — must dispatch before
+      // Annotations API (multiplayer contract stub); must dispatch before
       // the GET/HEAD method guard below since it speaks PUT/POST/DELETE.
       if (pathname === "/api/me" || pathname.startsWith("/api/")) {
         const handled = await handleAnnotationApi(req, res, url, pathname);

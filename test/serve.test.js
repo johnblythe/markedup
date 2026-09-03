@@ -7,7 +7,7 @@ const crypto = require("node:crypto");
 const net = require("node:net");
 
 // startServer() calls registry.register() unconditionally, so this file must
-// point HOME at a tmp dir before requiring src/serve — otherwise every test
+// point HOME at a tmp dir before requiring src/serve; otherwise every test
 // here writes into the user's real ~/.markup/instances.
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "markup-serve-"));
 process.env.HOME = tmpRoot;
@@ -106,6 +106,17 @@ test(
     const { status } = await fetchText(`${handle.url}../etc/passwd`);
     // Node sometimes normalizes the URL; ensure result is 403 or 404, never 200.
     assert.ok(status === 403 || status === 404, `expected 403/404, got ${status}`);
+  }),
+);
+
+test(
+  "GET with a malformed percent-encoded path returns 400, not a 500",
+  withTempArtifact(async ({ handle }) => {
+    // "%" not followed by two hex digits makes decodeURIComponent throw a
+    // URIError; that must be caught and reported as a client error.
+    const { status, body } = await fetchText(`${handle.url}%E0%A4%A`);
+    assert.strictEqual(status, 400);
+    assert.match(body, /malformed/i);
   }),
 );
 

@@ -1,6 +1,6 @@
 // Thin wrapper around John's `ld slack` CLI (cookie-authed, acts as the
-// logged-in user). Every call shells out via execFile — no shell, args passed
-// verbatim — and asks for JSON output. Reads that must see fresh data pass
+// logged-in user). Every call shells out via execFile (no shell, args passed
+// verbatim) and asks for JSON output. Reads that must see fresh data pass
 // --ttl 0 to bypass the CLI's cache.
 //
 // Channel IDs, not names, everywhere after creation: name resolution inside

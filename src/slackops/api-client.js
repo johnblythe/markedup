@@ -4,6 +4,8 @@
 // the ldpub Worker (Cloudflare Access service-token headers, taken from the
 // environment and never logged).
 
+const { slugFromSourceName } = require("../publish");
+
 const FETCH_TIMEOUT_MS = 10_000;
 
 // A shared doc URL looks like {origin}/{user}/{project}/[index.html]. The API
@@ -20,7 +22,7 @@ function parseDocUrl(docUrl) {
   if (segments.length && segments[segments.length - 1].includes(".")) segments.pop();
   if (segments.length < 2) {
     throw new Error(
-      `cannot derive {user}/{project} from ${docUrl} — expected {origin}/{user}/{project}/`,
+      `cannot derive {user}/{project} from ${docUrl}; expected {origin}/{user}/{project}/`,
     );
   }
   const [user, project] = segments;
@@ -30,7 +32,7 @@ function parseDocUrl(docUrl) {
 // The doc URL is operator-supplied, so it controls where the bridge sends
 // requests. Only two origins are ever contacted: localhost (stub / local
 // serve) and the configured ldpub origin from LDPUB_URL (https only). The
-// service token is attached only to the latter — never to an origin that
+// service token is attached only to the latter, never to an origin that
 // merely appeared in a pasted URL.
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
@@ -97,23 +99,10 @@ async function resolveDoc(docUrl) {
   return { apiBase: url.origin, user: "local", project, docUrl: `${url.origin}/` };
 }
 
-// serve.js derives the local project slug from the source filename this way;
-// kept in sync so the registry fallback below matches what serve mounts.
-function slugFromSourceName(sourceName) {
-  return (
-    String(sourceName)
-      .replace(/\.[^.]+$/, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "") || "artifact"
-  );
-}
-
 async function discoverLocalProject(origin) {
   // The served page carries the overlay's own config:
   //   window.__MARKUP_REMOTE__ = {"base":"","user":"local","project":"demo",...}
-  // That project value is authoritative — it's exactly what the client talks to.
+  // That project value is authoritative: it's exactly what the client talks to.
   try {
     const res = await fetch(`${origin}/`, { signal: AbortSignal.timeout(5_000) });
     if (res.ok) {
@@ -124,7 +113,7 @@ async function discoverLocalProject(origin) {
           const cfg = JSON.parse(remote[1]);
           if (cfg && cfg.project) return cfg.project;
         } catch (_e) {
-          // malformed literal — fall through to legacy signals
+          // malformed literal, fall through to legacy signals
         }
       }
       // Legacy signals, harmless if absent.

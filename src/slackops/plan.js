@@ -1,4 +1,4 @@
-// Pure planning logic for one bridge cycle. No I/O here — everything is
+// Pure planning logic for one bridge cycle. No I/O here: everything is
 // computed from (annotations fetched from the API, persisted state) so the
 // whole sync policy is unit-testable without Slack or a server.
 

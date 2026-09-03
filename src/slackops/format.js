@@ -1,7 +1,7 @@
 // Message formatting + the bridge marker. Every message the bridge writes
 // carries a `[md:...]` token so read-back can tell bridge output from human
-// replies — the only reliable signal, since the CLI posts as the logged-in
-// user and real humans type markerless messages in the Slack app.
+// replies (the only reliable signal, since the CLI posts as the logged-in
+// user and real humans type markerless messages in the Slack app).
 
 const crypto = require("node:crypto");
 
