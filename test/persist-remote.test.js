@@ -302,7 +302,7 @@ test("displayStatus maps wire values to human labels without touching them", asy
   assert.strictEqual(Persist.displayStatus({ status: "pending" }), "Needs another look");
   assert.strictEqual(
     Persist.displayStatus({ status: "pending", carryReason: "anchor-lost" }),
-    "Moved — re-attach",
+    "Moved: re-attach",
   );
   assert.strictEqual(
     Persist.displayStatus({ status: "pending", carryReason: "source-changed" }),
@@ -320,6 +320,85 @@ test("presence degrades silently when the endpoint is unavailable", async () => 
   // The stub fetch answers /presence with a generic {ok:true} body lacking
   // viewers — presence() must simply stay empty, never throw.
   assert.deepStrictEqual(Array.from(Persist.presence()), []);
+});
+
+test("ownsAnnotation is exported and matches the scoping used by deleteAnnotation/clearAll", async () => {
+  const { Persist } = loadPersist({
+    remote: { base: "", user: "u", project: "p" },
+    annotations: [],
+    me: "me@ld.com",
+  });
+  await new Promise((resolve) => Persist.init("key", resolve));
+
+  assert.strictEqual(typeof Persist.ownsAnnotation, "function");
+  assert.strictEqual(Persist.ownsAnnotation({ author: "me@ld.com" }), true);
+  assert.strictEqual(Persist.ownsAnnotation({ author: "them@ld.com" }), false);
+  // No author yet (still syncing a local creation) counts as owned.
+  assert.strictEqual(Persist.ownsAnnotation({}), true);
+});
+
+test("ownsAnnotation treats local-mode annotations (no author field) as owned", async () => {
+  // Local mode never stamps an author (that's server-only, in remote mode),
+  // so every annotation upsertAnnotation actually produces here is owned.
+  const { Persist } = loadPersist2Local();
+  await new Promise((resolve) => Persist.init("key", resolve));
+  assert.strictEqual(Persist.isRemote(), false);
+  Persist.upsertAnnotation("key", { id: "anno-1", note: "n" });
+  assert.strictEqual(Persist.ownsAnnotation(Persist.loadAnnotations("key")[0]), true);
+  assert.strictEqual(Persist.ownsAnnotation({}), true);
+});
+
+test("startPolling keeps pinging presence on a paused tick but skips the annotation fetch", async () => {
+  const fetchCalls = [];
+  let tick;
+  const sandbox = {
+    window: { __MARKUP_REMOTE__: { base: "", user: "u", project: "p" } },
+    localStorage: { getItem: () => null, setItem: () => {} },
+    console,
+    setInterval: (fn) => {
+      tick = fn;
+      return 1;
+    },
+    clearInterval: () => {},
+    fetch: (url, opts = {}) => {
+      const method = opts.method || "GET";
+      fetchCalls.push({ url, method });
+      if (url.endsWith("/api/me")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ email: "me@ld.com" }) });
+      }
+      if (url.endsWith("/annotations") && method === "GET") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ etag: "e1", annotations: [] }),
+        });
+      }
+      if (url.endsWith("/presence")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ viewers: [] }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
+    },
+  };
+  const src = fs.readFileSync(path.join(__dirname, "../src/client/persist.js"), "utf-8");
+  vm.createContext(sandbox);
+  vm.runInContext(src, sandbox);
+  const Persist = sandbox.Persist;
+
+  await new Promise((resolve) => Persist.init("key", resolve));
+  fetchCalls.length = 0;
+
+  Persist.startPolling("key", () => {}, { isPaused: () => true });
+  // startPolling's own leading ping, before any tick fires.
+  assert.strictEqual(fetchCalls.filter((c) => c.url.endsWith("/presence")).length, 1);
+  assert.strictEqual(fetchCalls.filter((c) => c.url.endsWith("/annotations")).length, 0);
+
+  fetchCalls.length = 0;
+  tick();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  // Paused: presence still pings every tick; the annotation fetch is skipped.
+  assert.strictEqual(fetchCalls.filter((c) => c.url.endsWith("/presence")).length, 1);
+  assert.strictEqual(fetchCalls.filter((c) => c.url.endsWith("/annotations")).length, 0);
 });
 
 test("local mode deleteAnnotation is unchanged (no author scoping)", async () => {

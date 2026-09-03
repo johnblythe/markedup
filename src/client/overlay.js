@@ -165,7 +165,7 @@
     row.className = "markup-strip-row";
 
     // Mode: one control that shows the current mode and expands to pick, the
-    // way the export icon does — the three modes don't all need to sit out at
+    // way the export icon does: the three modes don't all need to sit out at
     // once. T / P / R and ⌘K still switch mode without opening this.
     var modeWrap = document.createElement("div");
     modeWrap.className = "markup-strip-mode markup-toolbar-row-anchor";
@@ -363,7 +363,7 @@
 
     drawerBtn.addEventListener("click", function () {
       Sidebar.toggle();
-      // Opening the review panel is "looking at" the notes — clear the badge's
+      // Opening the review panel is "looking at" the notes; clear the badge's
       // "N new" so it only ever flags genuinely-unseen arrivals.
       if (Persist.isRemote() && Sidebar.isOpen()) {
         Persist.markSeen();
@@ -422,8 +422,8 @@
         });
     }
 
-    // Dock the strip into the drawer while it's open — one column, no
-    // floating box overlapping it. Closing the drawer restores the float.
+    // Dock the strip into the drawer while it's open (one column, no
+    // floating box overlapping it). Closing the drawer restores the float.
     Sidebar.setVisibilityListener(function (openNow) {
       closeFloatingPopups();
       if (openNow) {
@@ -452,11 +452,7 @@
 
     function clearAllAnnotations() {
       var all = Persist.loadAnnotations(sourceKey);
-      var mineCount = Persist.isRemote()
-        ? all.filter(function (a) {
-            return !a.author || a.author === Persist.self();
-          }).length
-        : all.length;
+      var mineCount = all.filter(Persist.ownsAnnotation).length;
       if (mineCount === 0) {
         Toast.show("No annotations of yours to clear.");
         return;
@@ -487,7 +483,7 @@
       var cmd = "markup pull " + window.location.origin + window.location.pathname;
       navigator.clipboard.writeText(cmd).then(
         function () {
-          Toast.show("Command copied — run it in a terminal to get the full bundle", 3500);
+          Toast.show("Command copied: run it in a terminal to get the full bundle", 3500);
         },
         function () {
           Toast.show(cmd, 6000);
@@ -519,7 +515,7 @@
 
     // Mode menu: the collapsed mode control toggles it; picking a mode (handled
     // above) or clicking anywhere else closes it. Same mutual-exclusivity as
-    // the export menu — opening it closes the palette, popover, and other popups.
+    // the export menu: opening it closes the palette, popover, and other popups.
     var modeMoreBtn = toolbar.querySelector('[data-action="mode-more"]');
     var modeMenuEl = toolbar.querySelector("[data-mode-menu]");
     if (modeMoreBtn && modeMenuEl) {
@@ -566,7 +562,7 @@
         if (Modes.isReattaching && Modes.isReattaching()) return;
         if (Sidebar.hasActiveComposer && Sidebar.hasActiveComposer()) {
           // Inside the textarea its own handler closes it; from anywhere
-          // else, close it here — Esc always dismisses one surface.
+          // else, close it here; Esc always dismisses one surface.
           if (!(e.target && e.target.tagName === "TEXTAREA")) {
             e.preventDefault();
             Sidebar.closeActiveComposer();
@@ -591,7 +587,7 @@
       true,
     );
 
-    // Clicking outside the open drawer closes it — but never while you're
+    // Clicking outside the open drawer closes it, but never while you're
     // placing an annotation (an active mode means a doc click is a new mark),
     // and never when the click lands on the drawer, a popover, or the toolbar
     // (which docks into the drawer while it's open).

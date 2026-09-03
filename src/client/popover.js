@@ -52,7 +52,7 @@ var Popover = (function () {
     btnRow.className = "markup-popover-buttons";
 
     // Destructive action isolated far left; a flexible spacer pushes the
-    // action group (Resolve · Cancel · Save, or Resolve … Close · Reply) to
+    // action group (Resolve, Cancel, Save; or Resolve, Close, Reply) to
     // the right edge so the primary is always the rightmost button.
     deleteBtn = document.createElement("button");
     deleteBtn.className = "markup-popover-delete markup-popover-danger";
@@ -153,7 +153,7 @@ var Popover = (function () {
   }
 
   // Position above anchorRect (in viewport coords). Falls back to below if no room above.
-  // Caller must add `.markup-popover-visible` before calling — that class controls display.
+  // Caller must add `.markup-popover-visible` before calling: that class controls display.
   function positionAt(anchorRect) {
     var scrollX = window.scrollX || window.pageXOffset || 0;
     var scrollY = window.scrollY || window.pageYOffset || 0;
@@ -178,7 +178,7 @@ var Popover = (function () {
   }
 
   // opts.readOnly renders another reviewer's note: text + attribution, no
-  // editing — the actions offered are exactly the ones that work (Resolve,
+  // editing; the actions offered are exactly the ones that work (Resolve,
   // Reply). Own notes get the full editor.
   function show(opts) {
     ensureBuilt();
@@ -237,5 +237,5 @@ var Popover = (function () {
     return el && el.classList.contains("markup-popover-visible");
   }
 
-  return { show: show, hide: hide, isVisible: isVisible };
+  return { show: show, hide: hide, isVisible: isVisible, relTime: relTime };
 })();
