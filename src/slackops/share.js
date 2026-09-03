@@ -1,4 +1,4 @@
-// `markup share` — bind a published doc to a private Slack channel.
+// `markup share`: bind a published doc to a private Slack channel.
 // Idempotent: re-running reuses the channel, re-invites are harmless, and the
 // link card posts at most once (tracked in bridge state).
 
@@ -7,28 +7,22 @@ const stateStore = require("./state");
 const format = require("./format");
 const defaultSlack = require("./slack-cli");
 const { resolveDoc, assertTrustedOrigin, authHeaders, fetchAnnotations } = require("./api-client");
+const { kebab } = require("../publish");
 
 const PREFIX = "markd-";
 const TEST_PREFIX = "markd-test-";
 // Slack channel names cap at 80 chars, lowercase.
 const MAX_NAME = 76;
 
-function slugify(raw) {
-  return String(raw)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
 function channelNameFor({ user, project, test, channelOverride }) {
   if (channelOverride) {
-    // Slugified so the name is Slack-legal and can't traverse out of the
+    // kebab-cased so the name is Slack-legal and can't traverse out of the
     // state directory (the state file is named after the channel).
-    const clean = slugify(channelOverride.replace(/^#/, "")).slice(0, MAX_NAME);
+    const clean = kebab(channelOverride.replace(/^#/, "")).slice(0, MAX_NAME);
     if (clean) return clean;
   }
   const prefix = test ? TEST_PREFIX : PREFIX;
-  return `${prefix}${slugify(`${user}-${project}`)}`.slice(0, MAX_NAME);
+  return `${prefix}${kebab(`${user}-${project}`)}`.slice(0, MAX_NAME);
 }
 
 async function fetchDocTitle(docUrl) {
@@ -193,4 +187,6 @@ async function shareDoc({
   return { channelId: state.channelId, channelName, stateFile: stateStore.stateFile(stateDir, channelName) };
 }
 
-module.exports = { shareDoc, channelNameFor, slugify, fetchDocTitle, PREFIX, TEST_PREFIX };
+// Exported as `slugify` for backward compatibility with existing callers and
+// tests; kebab() from publish.js is now the single slug implementation.
+module.exports = { shareDoc, channelNameFor, slugify: kebab, fetchDocTitle, PREFIX, TEST_PREFIX };
