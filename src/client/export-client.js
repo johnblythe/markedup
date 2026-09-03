@@ -158,7 +158,7 @@ var ExportClient = (function () {
             "` (" +
             path +
             ")" +
-            (anchorText ? ' — text: "' + anchorText + '"' : "") +
+            (anchorText ? '; text: "' + anchorText + '"' : "") +
             ": " +
             (a.note || "(no note)"),
         );
@@ -330,7 +330,7 @@ var ExportClient = (function () {
     var built = buildPayload(sourceKey, { inlineImages: true });
     var filename = feedbackFileName(built.stamp);
     triggerDownload(filename, built.markdown);
-    Toast.show("Downloaded " + filename + " — run `markup pull <url>` for a bundle with separate PNGs", 5000);
+    Toast.show("Downloaded " + filename + ": run `markup pull <url>` for a bundle with separate PNGs", 5000);
   }
 
   function exportToDisk(sourceKey) {
