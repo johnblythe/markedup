@@ -201,6 +201,7 @@ var Sidebar = (function () {
     if (!activeComposer) return;
     var c = activeComposer;
     activeComposer = null;
+    if (c.onKey) window.removeEventListener("keydown", c.onKey, true);
     if (c.box.parentNode) c.box.parentNode.removeChild(c.box);
     c.btn.style.display = "";
   }
@@ -255,22 +256,27 @@ var Sidebar = (function () {
       e.stopPropagation();
       doSend();
     });
-    ta.addEventListener("keydown", function (e) {
+    // Window CAPTURE (see popover.js): the keyboard-isolation shield stops
+    // propagation at window for keys typed in markup text boxes, so a
+    // listener on the textarea itself never fires. Removed in closeComposer.
+    function onComposerKey(e) {
+      if (e.target !== ta) return;
       // Cmd/Ctrl+Enter sends; Esc closes just the composer.
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         doSend();
       } else if (e.key === "Escape") {
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         closeComposer();
       }
-    });
+    }
+    window.addEventListener("keydown", onComposerKey, true);
 
     replyBtn.style.display = "none";
     threadEl.appendChild(box);
-    activeComposer = { box: box, btn: replyBtn, annoId: anno.id };
+    activeComposer = { box: box, btn: replyBtn, annoId: anno.id, onKey: onComposerKey };
     ta.focus();
   }
 

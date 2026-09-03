@@ -178,6 +178,11 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Fixed
 
+- Cmd/Ctrl+Enter and Esc work again inside markup's own text boxes (popover
+  note, reply composer, palette input). The keyboard-isolation shield stops
+  propagation at window, which silently killed every key listener attached to
+  the text boxes themselves; those shortcuts now live on window capture,
+  where the shield can't cut them off, and the host page stays isolated (#6).
 - The drawer's per-section "Remove all" is scoped to your own annotations,
   matching Clear all: the label and confirm count only yours, others' notes
   are kept and the toast says how many; a section with none of yours no-ops

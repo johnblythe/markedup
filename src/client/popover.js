@@ -108,17 +108,34 @@ var Popover = (function () {
       }
       hide();
     });
-    textarea.addEventListener("keydown", function (e) {
-      // Cmd+Enter (mac) or Ctrl+Enter saves and closes.
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (currentHandlers && currentHandlers.onSave) {
-          currentHandlers.onSave(textarea.value);
+    // Window CAPTURE, not a textarea listener: the keyboard-isolation shield
+    // (overlay.js) stops propagation at window for keys typed in markup text
+    // boxes, so nothing below window ever fires for them. Same-node listeners
+    // are immune to stopPropagation, which makes window capture the only
+    // place markup's own in-textbox shortcuts can live.
+    window.addEventListener(
+      "keydown",
+      function (e) {
+        if (e.target !== textarea) return;
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+          // Cmd+Enter (mac) or Ctrl+Enter saves and closes.
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          if (currentHandlers && currentHandlers.onSave) {
+            currentHandlers.onSave(textarea.value);
+          }
+          hide();
+        } else if (e.key === "Escape") {
+          // Esc with the caret in the note box: the document-level Esc
+          // handler below never sees these, so cancel from here.
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          if (currentHandlers && currentHandlers.onCancel) currentHandlers.onCancel();
+          hide();
         }
-        hide();
-      }
-    });
+      },
+      true,
+    );
     cancelBtn.addEventListener("click", function () {
       if (currentHandlers && currentHandlers.onCancel) currentHandlers.onCancel();
       hide();
