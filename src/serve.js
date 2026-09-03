@@ -137,8 +137,9 @@ async function startServer(filePath, opts = {}) {
   // Presence heartbeats, identity -> last-seen ISO. In-memory on purpose.
   const presenceViewers = new Map();
 
-  const clientBundle = buildClientBundle();
-  const stylesCSS = getStylesCSS();
+  // buildClientBundle()/getStylesCSS() re-stat client/* on every call and only
+  // rebuild when something changed, so call them fresh per request below
+  // rather than capturing a stale copy here at startup.
   const modernScreenshotPath = require.resolve("modern-screenshot/dist/index.js");
   const modernScreenshotSrc = fs.readFileSync(modernScreenshotPath);
 
@@ -301,7 +302,7 @@ async function startServer(filePath, opts = {}) {
         const wrapped = wrapHTML(raw, {
           key: sourcePath,
           sourceName,
-          styles: stylesCSS,
+          styles: getStylesCSS(),
           sourceHash,
           remote: multiplayer
             ? { user: "local", project: projectSlug, identity: personaFrom(url) || undefined }
@@ -316,7 +317,7 @@ async function startServer(filePath, opts = {}) {
           res,
           200,
           "application/javascript; charset=utf-8",
-          Buffer.from(clientBundle, "utf-8"),
+          Buffer.from(buildClientBundle(), "utf-8"),
         );
       }
 
@@ -327,7 +328,7 @@ async function startServer(filePath, opts = {}) {
 
       // GET /__markup/styles.css (alternate fetch path; styles are inlined too)
       if (pathname === "/__markup/styles.css") {
-        return sendBuffer(res, 200, "text/css; charset=utf-8", Buffer.from(stylesCSS, "utf-8"));
+        return sendBuffer(res, 200, "text/css; charset=utf-8", Buffer.from(getStylesCSS(), "utf-8"));
       }
 
       // Static serve from sourceDir for any other GET.
@@ -347,7 +348,7 @@ async function startServer(filePath, opts = {}) {
         const wrapped = wrapHTML(raw, {
           key: sourcePath,
           sourceName,
-          styles: stylesCSS,
+          styles: getStylesCSS(),
           sourceHash,
           remote: multiplayer
             ? { user: "local", project: projectSlug, identity: personaFrom(url) || undefined }

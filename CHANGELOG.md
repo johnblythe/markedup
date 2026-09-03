@@ -267,6 +267,14 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
   chips. On a shared canvas, a note with no author gets a neutral
   "unattributed" look instead of a hashed identity color that dressed it
   up as a real teammate (#3).
+- `markup serve` (LD-173) built the client bundle and overlay stylesheet
+  once at startup and served those strings for the life of the process, so
+  a long-running instance kept serving stale overlay code after the
+  `markup` package was upgraded until it was manually restarted.
+  `client-bundle.js` now caches the built bundle/styles keyed by the max
+  mtime across `src/client/*` and `styles.css`; `serve.js` calls the fresh
+  getters on every request instead of a startup-captured copy, so edits
+  (or an upgrade) show up on the next request with no restart (#4).
 
 ## [0.1.2] - 2026-06-22
 
