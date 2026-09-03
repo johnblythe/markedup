@@ -608,8 +608,13 @@ test("assertTrustedOrigin: localhost and LDPUB_URL pass, everything else refuses
   withEnv({ LDPUB_URL: "http://ldpub.example.dev" }, () => {
     assert.throws(() => assertTrustedOrigin("http://ldpub.example.dev"), /refusing/);
   });
-  withEnv({ LDPUB_URL: undefined }, () => {
-    assert.throws(() => assertTrustedOrigin("https://anything.dev"), /LDPUB_URL/);
+  // With no explicit LDPUB_URL anywhere in the chain (env file pointed at a
+  // nonexistent path so a developer's real ~/code/ldpub/.env can't leak in),
+  // the documented default origin applies, exactly as `markup publish` does;
+  // foreign origins still refuse.
+  withEnv({ LDPUB_URL: undefined, LDPUB_ENV_FILE: "/nonexistent/markup-test/.env" }, () => {
+    assertTrustedOrigin("https://ldpub.jblythe.workers.dev");
+    assert.throws(() => assertTrustedOrigin("https://anything.dev"), /refusing/);
   });
 });
 

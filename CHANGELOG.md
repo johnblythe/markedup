@@ -164,6 +164,29 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Fixed
 
+- Rect screenshots mirrored to Slack now carry an absolute URL resolved
+  against the canvas origin instead of a dead server-relative path (#5).
+- `markup share`/`bridge` read credentials through the same config chain as
+  `publish`/`pull` (env vars, then `LDPUB_ENV_FILE`, then `~/code/ldpub/.env`),
+  so a .env-only setup no longer works for publishing but silently fails for
+  the Slack ops; with nothing configured, the documented default origin
+  applies everywhere consistently (#5).
+- `.env` values keep their trailing whitespace no longer: a stray space or CR
+  after a client secret used to break Cloudflare Access auth with a generic
+  error (#5).
+- On a shared canvas, exports fall back to the uploaded screenshot URL when
+  the local PNG data isn't held by this viewer, instead of printing
+  "[screenshot unavailable]" for screenshots that exist (#5).
+- "Disk" export probes POST /export and only falls back to a browser download
+  where the route truly doesn't exist (a published canvas), so local
+  `serve --multiplayer` keeps the on-disk feedback bundle with separate PNG
+  assets (#5).
+- `markup serve --multiplayer` re-checks the instance registry after
+  registering, closing the startup race where two processes serving the same
+  file could both pass the single-writer guard and interleave annotation
+  writes (#5).
+- `markup pull` warns when a rect screenshot fails to download instead of
+  silently omitting it from the bundle (#5).
 - Cross-author rules are now enforced server-side, not just in the UI: DELETE
   refuses to tombstone another author's note (403), and a cross-author PUT
   can drive only the status transition; every other field (mode, pinNum,

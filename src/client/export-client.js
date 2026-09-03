@@ -180,6 +180,12 @@ var ExportClient = (function () {
             imgRef = "![rect-" + num + "](" + assetsDirName(stamp) + "/" + filename + ")";
             assets.push({ filename: filename, dataURL: a.payload.pngDataURL });
           }
+        } else if (a.shotUrl) {
+          // The server strips pngDataURL on every PUT, so only the viewer who
+          // took the shot has the data URL. Everyone else still has the
+          // uploaded PNG's URL; the sidebar thumbnail renders from it and the
+          // export must too.
+          imgRef = "![rect-" + num + "](" + a.shotUrl + ")";
         } else {
           imgRef =
             "[screenshot unavailable" +
@@ -334,12 +340,10 @@ var ExportClient = (function () {
   }
 
   function exportToDisk(sourceKey) {
-    // On a shared canvas there is no local source folder and the Worker
-    // serves no /export route; download the markdown directly instead.
-    if (typeof Persist !== "undefined" && Persist.isRemote && Persist.isRemote()) {
-      exportToDownload(sourceKey);
-      return;
-    }
+    // Remote mode alone doesn't rule out a disk bundle: local
+    // `serve --multiplayer` is remote-flavored but still mounts POST /export
+    // next to the source file. Try the route and fall back to the download
+    // only where it truly doesn't exist (a published canvas on the Worker).
     var built = buildPayload(sourceKey, { inlineImages: false });
     Toast.show("Writing feedback bundle to disk...");
     fetch("/export", {
@@ -348,11 +352,21 @@ var ExportClient = (function () {
       body: JSON.stringify(built),
     })
       .then(function (res) {
-        return res.json().then(function (j) {
-          return { status: res.status, body: j };
-        });
+        return res.json().then(
+          function (j) {
+            return { status: res.status, body: j };
+          },
+          function () {
+            return { status: res.status, body: null };
+          },
+        );
       })
       .then(function (r) {
+        if (r.status === 404 || r.status === 405) {
+          // No /export route here: shared canvas with no local source folder.
+          exportToDownload(sourceKey);
+          return;
+        }
         if (r.status === 200 && r.body && r.body.ok) {
           var feedbackPath = r.body.feedbackPath || "feedback.md";
           var msg = "Wrote " + feedbackPath;

@@ -98,6 +98,19 @@ function truncate(text, max) {
   return clean.length <= max ? clean : `${clean.slice(0, max - 1)}…`;
 }
 
+// shotUrl is stored server-relative (/api/user/project/shots/id.png); a bare
+// relative path in a Slack message is dead text, so resolve it against the
+// canvas origin before posting.
+function absoluteShotUrl(shotUrl, docUrl) {
+  if (!shotUrl) return null;
+  if (/^https?:\/\//i.test(shotUrl)) return shotUrl;
+  try {
+    return new URL(shotUrl, docUrl).toString();
+  } catch (_e) {
+    return shotUrl;
+  }
+}
+
 function topLevelText(anno, docUrl) {
   const lines = [
     `:memo: *${annoLabel(anno)}* · ${anno.author || "unknown"} · ${annoStatus(anno)}`,
@@ -105,7 +118,8 @@ function topLevelText(anno, docUrl) {
   const ctx = contextLine(anno);
   if (ctx) lines.push(ctx);
   if (anno.note) lines.push(anno.note);
-  if (anno.shotUrl) lines.push(anno.shotUrl);
+  const shot = absoluteShotUrl(anno.shotUrl, docUrl);
+  if (shot) lines.push(shot);
   lines.push(docUrl);
   lines.push(`[md:${anno.id}]`);
   return lines.join("\n");

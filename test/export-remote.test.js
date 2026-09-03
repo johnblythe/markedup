@@ -12,7 +12,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-function loadExportEnv({ remote, annotations, me }) {
+function loadExportEnv({ remote, annotations, me, exportRoute = true }) {
   const events = { downloads: [], fetches: [], clicks: 0 };
 
   // Minimal DOM: enough for Toast (lazy, unused here) and triggerDownload.
@@ -66,6 +66,15 @@ function loadExportEnv({ remote, annotations, me }) {
         });
       }
       if (url === "/export") {
+        // exportRoute=false models a published canvas: the Worker serves no
+        // /export route, so the probe gets a 404 (an HTML page, not JSON).
+        if (!exportRoute) {
+          return Promise.resolve({
+            ok: false,
+            status: 404,
+            json: () => Promise.reject(new Error("not json")),
+          });
+        }
         return Promise.resolve({
           ok: true,
           status: 200,
@@ -109,7 +118,27 @@ test("remote export payload contains another author's annotation (full shared se
   assert.match(built.markdown, /corbin's finding about the totals/);
 });
 
-test("remote Disk export downloads the .md client-side and never POSTs /export", async () => {
+test("published canvas Disk export falls back to a download when /export is missing", async () => {
+  const { sandbox, events } = loadExportEnv({
+    remote: { base: "", user: "u", project: "p" },
+    annotations: SHARED,
+    me: "me@ld.com",
+    exportRoute: false,
+  });
+  await new Promise((resolve) => sandbox.Persist.init("key", resolve));
+
+  sandbox.ExportClient.exportToDisk("key");
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.ok(
+    events.fetches.some((f) => f.url === "/export" && f.method === "POST"),
+    "probes the /export route first",
+  );
+  assert.strictEqual(events.clicks, 1, "one download triggered");
+  assert.match(events.downloads[0].download, /report\.feedback-.*\.md$/);
+});
+
+test("local multiplayer Disk export still writes the on-disk bundle via /export", async () => {
   const { sandbox, events } = loadExportEnv({
     remote: { base: "", user: "u", project: "p" },
     annotations: SHARED,
@@ -118,10 +147,10 @@ test("remote Disk export downloads the .md client-side and never POSTs /export",
   await new Promise((resolve) => sandbox.Persist.init("key", resolve));
 
   sandbox.ExportClient.exportToDisk("key");
+  await new Promise((resolve) => setImmediate(resolve));
 
-  assert.strictEqual(events.clicks, 1, "one download triggered");
-  assert.match(events.downloads[0].download, /report\.feedback-.*\.md$/);
-  assert.ok(!events.fetches.some((f) => f.url === "/export"), "must not hit the /export route");
+  assert.ok(events.fetches.some((f) => f.url === "/export" && f.method === "POST"));
+  assert.strictEqual(events.clicks, 0, "no client-side download when the route exists");
 });
 
 test("local Disk export still POSTs /export (unchanged)", async () => {

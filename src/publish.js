@@ -29,9 +29,12 @@ function parseEnvFile(envPath) {
   const out = {};
   if (!fs.existsSync(envPath)) return out;
   for (const line of fs.readFileSync(envPath, "utf-8").split("\n")) {
-    const m = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+    const m = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)$/);
     if (!m) continue;
-    out[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    // `(.*)` is greedy, so trailing whitespace (and CR from CRLF files) would
+    // survive into credential values and break Access auth opaquely; trim
+    // before stripping quotes.
+    out[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
   }
   return out;
 }
@@ -182,11 +185,19 @@ async function pull(urlStr, opts = {}) {
     assetsDirName,
   });
 
-  // Resolve rect screenshots into dataURL assets for the bundle writer.
+  // Resolve rect screenshots into dataURL assets for the bundle writer. A
+  // failed fetch is skipped but never silently: the operator must be able to
+  // tell "screenshot lost" from "screenshot never existed".
   const resolvedAssets = [];
   for (const asset of assets) {
     const shotRes = await apiFetch(config, "GET", `/api/${user}/${project}/shots/${asset.annoId}.png`);
-    if (!shotRes.ok) continue;
+    if (!shotRes.ok) {
+      console.error(
+        `markup: warning: screenshot ${asset.filename} (annotation ${asset.annoId}) ` +
+          `failed to download (${shotRes.status}); the bundle references it but the file is missing`,
+      );
+      continue;
+    }
     const buf = Buffer.from(await shotRes.arrayBuffer());
     resolvedAssets.push({
       filename: asset.filename,
