@@ -104,3 +104,78 @@ test("buildPayload reports (no annotations) only when every mode is empty, inclu
   const built = ctx.ExportClient.buildPayload(sourceKey, { inlineImages: false });
   assert.match(built.markdown, /\(no annotations\)/);
 });
+
+test("unresolvedOnly omits accepted notes and carries the ledger protocol header", () => {
+  const ctx = loadExportContext();
+  const k = "/tmp/artifact-diff.html";
+  ctx.Persist.upsertAnnotation(k, {
+    id: "a1",
+    mode: "span",
+    note: "old and handled",
+    status: "accepted",
+    payload: { anchorText: "old text" },
+  });
+  ctx.Persist.upsertAnnotation(k, {
+    id: "a2",
+    mode: "span",
+    note: "new round",
+    payload: { anchorText: "new text" },
+  });
+
+  const built = ctx.ExportClient.buildPayload(k, { inlineImages: true, unresolvedOnly: true });
+
+  assert.doesNotMatch(built.markdown, /old and handled/);
+  assert.match(built.markdown, /new round/);
+  assert.match(
+    built.markdown,
+    /This batch: 1 unresolved annotation\(s\); 1 resolved from earlier rounds omitted\./,
+  );
+  assert.match(built.markdown, /artifact\.feedback-ledger\.md/);
+  assert.match(built.markdown, /act ONLY on the items in this batch/);
+  assert.strictEqual(built.count, 1);
+  assert.strictEqual(built.omittedResolved, 1);
+});
+
+test("full-record exports keep resolved notes and carry no ledger protocol", () => {
+  const ctx = loadExportContext();
+  const k = "/tmp/artifact-full.html";
+  ctx.Persist.upsertAnnotation(k, {
+    id: "a1",
+    mode: "span",
+    note: "old and handled",
+    status: "accepted",
+    payload: { anchorText: "old text" },
+  });
+  ctx.Persist.upsertAnnotation(k, {
+    id: "a2",
+    mode: "span",
+    note: "new round",
+    payload: { anchorText: "new text" },
+  });
+
+  const built = ctx.ExportClient.buildPayload(k, { inlineImages: false });
+
+  assert.match(built.markdown, /old and handled/);
+  assert.match(built.markdown, /new round/);
+  assert.match(built.markdown, /Total annotations: 2/);
+  assert.doesNotMatch(built.markdown, /feedback-ledger/);
+});
+
+test("unresolvedOnly with everything resolved reports an empty batch", () => {
+  const ctx = loadExportContext();
+  const k = "/tmp/artifact-all-done.html";
+  ctx.Persist.upsertAnnotation(k, {
+    id: "a1",
+    mode: "pin",
+    note: "done",
+    status: "accepted",
+    pinNum: 1,
+    payload: {},
+  });
+
+  const built = ctx.ExportClient.buildPayload(k, { inlineImages: true, unresolvedOnly: true });
+
+  assert.strictEqual(built.count, 0);
+  assert.strictEqual(built.omittedResolved, 1);
+  assert.match(built.markdown, /\(no unresolved annotations\)/);
+});

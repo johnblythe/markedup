@@ -88,12 +88,49 @@ var ExportClient = (function () {
     var assets = [];
     var lines = [];
 
-    lines.push("# Feedback: " + sourceName);
-    lines.push("Reviewed: " + new Date().toISOString());
+    // Diff scope for "Copy for your agent": resolved rounds stay out of the
+    // paste so already-handled feedback cannot distract the agent from the
+    // current batch. Full-record exports (download/disk) never set this.
+    var omittedResolved = 0;
+    if (opts.unresolvedOnly) {
+      var full = list;
+      list = full.filter(function (a) {
+        return (a.status || "open") !== "accepted";
+      });
+      omittedResolved = full.length - list.length;
+    }
+    var reviewedAt = new Date().toISOString();
+
+    lines.push("# Feedback: " + sourceName + (opts.unresolvedOnly ? " (unresolved only)" : ""));
+    lines.push("Reviewed: " + reviewedAt);
     lines.push("Export stamp: " + stamp);
     lines.push("");
     lines.push("Source: `" + sourceKey + "`");
-    lines.push("Total annotations: " + list.length);
+    if (opts.unresolvedOnly) {
+      lines.push(
+        "This batch: " +
+          list.length +
+          " unresolved annotation(s); " +
+          omittedResolved +
+          " resolved from earlier rounds omitted.",
+      );
+      lines.push("");
+      var ledgerName = ledgerFileName();
+      lines.push("> **Agent instructions: incremental feedback protocol.** This message");
+      lines.push("> carries only the annotations not yet resolved; earlier rounds are");
+      lines.push("> omitted on purpose so handled feedback cannot distract from this batch.");
+      lines.push("> 1. If `" + ledgerName + "` does not exist in this project (repo root,");
+      lines.push(">    or beside the artifact), create it with the single heading");
+      lines.push(">    `# Feedback ledger: " + sourceName + "`.");
+      lines.push("> 2. Append everything below the `---` line to that file verbatim, under");
+      lines.push(">    a new `## " + reviewedAt + "` heading.");
+      lines.push("> 3. Then act ONLY on the items in this batch. The ledger is history for");
+      lines.push(">    reference, never a work queue; do not re-apply earlier entries.");
+      lines.push("");
+      lines.push("---");
+    } else {
+      lines.push("Total annotations: " + list.length);
+    }
     lines.push("");
 
     var spans = list.filter(function (a) {
@@ -210,10 +247,24 @@ var ExportClient = (function () {
     }
 
     if (!spans.length && !highlights.length && !strikes.length && !pins.length && !rects.length) {
-      lines.push("(no annotations)");
+      lines.push(opts.unresolvedOnly ? "(no unresolved annotations)" : "(no annotations)");
     }
 
-    return { markdown: lines.join("\n"), assets: assets, stamp: stamp };
+    return {
+      markdown: lines.join("\n"),
+      assets: assets,
+      stamp: stamp,
+      count: list.length,
+      omittedResolved: omittedResolved,
+    };
+  }
+
+  // The append-only history file the receiving agent maintains; the copy's
+  // header tells it to create/append. Named from the artifact stem so several
+  // artifacts in one repo keep separate ledgers.
+  function ledgerFileName() {
+    var src = window.__MARKUP_SOURCE_NAME__ || "artifact.html";
+    return src.replace(/\.[^.]+$/, "") + ".feedback-ledger.md";
   }
 
   function pinSymbol(n) {
@@ -287,7 +338,15 @@ var ExportClient = (function () {
   }
 
   function exportToClipboard(sourceKey) {
-    var built = buildPayload(sourceKey, { inlineImages: true });
+    var built = buildPayload(sourceKey, { inlineImages: true, unresolvedOnly: true });
+    if (built.count === 0) {
+      Toast.show(
+        built.omittedResolved
+          ? "Nothing unresolved to copy (" + built.omittedResolved + " resolved stay in the drawer)"
+          : "No annotations to copy",
+      );
+      return;
+    }
     var size = built.markdown.length;
     if (size > 5 * 1024 * 1024) {
       Toast.show("Warning: clipboard payload > 5MB, paste may fail in some apps");
@@ -298,7 +357,15 @@ var ExportClient = (function () {
           Toast.show("Copied to clipboard (fallback)");
           return;
         }
-        Toast.show("Copied " + (size / 1024).toFixed(1) + " KB to clipboard");
+        Toast.show(
+          "Copied " +
+            built.count +
+            " unresolved note(s)" +
+            (built.omittedResolved ? "; " + built.omittedResolved + " resolved omitted" : "") +
+            " (" +
+            (size / 1024).toFixed(1) +
+            " KB)",
+        );
       },
       function (err) {
         Toast.show("Clipboard write failed: " + err.message);
