@@ -119,6 +119,14 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Changed
 
+- "Copy for your agent" (the C shortcut and the palette command) now copies
+  only unresolved annotations, with an instruction header teaching the
+  receiving agent an incremental-feedback protocol: keep an append-only
+  `<artifact>.feedback-ledger.md` (create it if missing, append each batch
+  under a timestamp heading) and act only on the current batch. Resolved
+  rounds stay in the drawer and the ledger instead of re-entering agent
+  context every paste; with nothing unresolved, the copy no-ops with a toast.
+  Download and disk exports remain full-record (#7).
 - Ownership is checked in one place: the drawer, popover paths, and toolbar
   count all use `Persist.ownsAnnotation` instead of three hand-rolled
   derivations (#6).
