@@ -52,7 +52,7 @@ var Popover = (function () {
     btnRow.className = "markup-popover-buttons";
 
     // Destructive action isolated far left; a flexible spacer pushes the
-    // action group (Resolve · Cancel · Save, or Resolve … Close · Reply) to
+    // action group (Resolve, Cancel, Save; or Resolve, Close, Reply) to
     // the right edge so the primary is always the rightmost button.
     deleteBtn = document.createElement("button");
     deleteBtn.className = "markup-popover-delete markup-popover-danger";
@@ -108,17 +108,34 @@ var Popover = (function () {
       }
       hide();
     });
-    textarea.addEventListener("keydown", function (e) {
-      // Cmd+Enter (mac) or Ctrl+Enter saves and closes.
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (currentHandlers && currentHandlers.onSave) {
-          currentHandlers.onSave(textarea.value);
+    // Window CAPTURE, not a textarea listener: the keyboard-isolation shield
+    // (overlay.js) stops propagation at window for keys typed in markup text
+    // boxes, so nothing below window ever fires for them. Same-node listeners
+    // are immune to stopPropagation, which makes window capture the only
+    // place markup's own in-textbox shortcuts can live.
+    window.addEventListener(
+      "keydown",
+      function (e) {
+        if (e.target !== textarea) return;
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+          // Cmd+Enter (mac) or Ctrl+Enter saves and closes.
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          if (currentHandlers && currentHandlers.onSave) {
+            currentHandlers.onSave(textarea.value);
+          }
+          hide();
+        } else if (e.key === "Escape") {
+          // Esc with the caret in the note box: the document-level Esc
+          // handler below never sees these, so cancel from here.
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          if (currentHandlers && currentHandlers.onCancel) currentHandlers.onCancel();
+          hide();
         }
-        hide();
-      }
-    });
+      },
+      true,
+    );
     cancelBtn.addEventListener("click", function () {
       if (currentHandlers && currentHandlers.onCancel) currentHandlers.onCancel();
       hide();
@@ -153,7 +170,7 @@ var Popover = (function () {
   }
 
   // Position above anchorRect (in viewport coords). Falls back to below if no room above.
-  // Caller must add `.markup-popover-visible` before calling — that class controls display.
+  // Caller must add `.markup-popover-visible` before calling: that class controls display.
   function positionAt(anchorRect) {
     var scrollX = window.scrollX || window.pageXOffset || 0;
     var scrollY = window.scrollY || window.pageYOffset || 0;
@@ -178,7 +195,7 @@ var Popover = (function () {
   }
 
   // opts.readOnly renders another reviewer's note: text + attribution, no
-  // editing — the actions offered are exactly the ones that work (Resolve,
+  // editing; the actions offered are exactly the ones that work (Resolve,
   // Reply). Own notes get the full editor.
   function show(opts) {
     ensureBuilt();
@@ -237,5 +254,5 @@ var Popover = (function () {
     return el && el.classList.contains("markup-popover-visible");
   }
 
-  return { show: show, hide: hide, isVisible: isVisible };
+  return { show: show, hide: hide, isVisible: isVisible, relTime: relTime };
 })();

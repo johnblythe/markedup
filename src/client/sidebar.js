@@ -1,7 +1,7 @@
 // Review panel sidebar. Lists ALL annotations grouped by lifecycle state:
-//   Pending  — anchor lost, OR carried from previous source version. Needs triage.
-//   Open     — active feedback, still attached to current DOM.
-//   Accepted — user marked addressed. Kept for the record.
+//   Pending  : anchor lost, OR carried from previous source version. Needs triage.
+//   Open     : active feedback, still attached to current DOM.
+//   Accepted : user marked addressed. Kept for the record.
 //
 // Per-state actions:
 //   Pending  : Where it was / Re-attach / Accept / Remove
@@ -22,16 +22,6 @@ var Sidebar = (function () {
   var walkList = [];
   var walkIndex = -1;
   var activeComposer = null;
-
-  function relTime(iso) {
-    var t = Date.parse(iso);
-    if (!isFinite(t)) return "";
-    var s = Math.max(0, (Date.now() - t) / 1000);
-    if (s < 45) return "just now";
-    if (s < 3600) return Math.round(s / 60) + "m ago";
-    if (s < 86400) return Math.round(s / 3600) + "h ago";
-    return new Date(t).toLocaleDateString();
-  }
 
   function shortName(email) {
     return String(email || "?").split("@")[0];
@@ -60,7 +50,7 @@ var Sidebar = (function () {
       el.setAttribute("title", author);
     } else {
       // No author on a shared canvas: the note predates attribution or was
-      // imported from a solo session. Neutral gray, never an identity hue —
+      // imported from a solo session. Neutral gray, never an identity hue;
       // hashing "?" into the wheel would dress it up as a real teammate.
       el.textContent = "?";
       el.classList.add("markup-sidebar-avatar-unknown");
@@ -181,7 +171,7 @@ var Sidebar = (function () {
 
         var when = document.createElement("span");
         when.className = "markup-sidebar-reply-when";
-        when.textContent = relTime(r.at);
+        when.textContent = Popover.relTime(r.at);
         line.appendChild(when);
 
         var text = document.createElement("div");
@@ -211,6 +201,7 @@ var Sidebar = (function () {
     if (!activeComposer) return;
     var c = activeComposer;
     activeComposer = null;
+    if (c.onKey) window.removeEventListener("keydown", c.onKey, true);
     if (c.box.parentNode) c.box.parentNode.removeChild(c.box);
     c.btn.style.display = "";
   }
@@ -265,22 +256,27 @@ var Sidebar = (function () {
       e.stopPropagation();
       doSend();
     });
-    ta.addEventListener("keydown", function (e) {
+    // Window CAPTURE (see popover.js): the keyboard-isolation shield stops
+    // propagation at window for keys typed in markup text boxes, so a
+    // listener on the textarea itself never fires. Removed in closeComposer.
+    function onComposerKey(e) {
+      if (e.target !== ta) return;
       // Cmd/Ctrl+Enter sends; Esc closes just the composer.
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         doSend();
       } else if (e.key === "Escape") {
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         closeComposer();
       }
-    });
+    }
+    window.addEventListener("keydown", onComposerKey, true);
 
     replyBtn.style.display = "none";
     threadEl.appendChild(box);
-    activeComposer = { box: box, btn: replyBtn, annoId: anno.id };
+    activeComposer = { box: box, btn: replyBtn, annoId: anno.id, onKey: onComposerKey };
     ta.focus();
   }
 
@@ -301,11 +297,11 @@ var Sidebar = (function () {
     if (sessionNewIds[anno.id]) entry.classList.add("markup-sidebar-entry-new");
 
     // Header: who + when, then (pending only) why it needs a look, then the
-    // kind token. Lifecycle chips are gone — the section already says status.
+    // kind token. Lifecycle chips are gone: the section already says status.
     var top = document.createElement("div");
     top.className = "markup-sidebar-entry-top";
     // Attribution is a shared-canvas concept. Solo mode has exactly one
-    // author (you), so who-chips would be noise — the row starts at the time.
+    // author (you), so who-chips would be noise; the row starts at the time.
     if (Persist.isRemote && Persist.isRemote()) {
       top.appendChild(avatarEl(anno.author));
       var name = document.createElement("span");
@@ -330,7 +326,7 @@ var Sidebar = (function () {
     var when = document.createElement("span");
     when.className = "markup-sidebar-when";
     try {
-      when.textContent = relTime(anno.createdAt);
+      when.textContent = Popover.relTime(anno.createdAt);
       when.setAttribute("title", new Date(anno.createdAt).toLocaleString());
     } catch (_e) {
       when.textContent = "";
@@ -403,10 +399,10 @@ var Sidebar = (function () {
     var actions = document.createElement("div");
     actions.className = "markup-sidebar-actions";
 
-    // Only the author edits or removes a note (or re-attaches it — that
+    // Only the author edits or removes a note (or re-attaches it, which
     // rewrites its anchor). Anyone may resolve, re-open, and reply, so
     // another reviewer's entry offers exactly those.
-    var owns = !(Persist.isRemote && Persist.isRemote()) || !anno.author || anno.author === Persist.self();
+    var owns = Persist.ownsAnnotation(anno);
 
     function removeBtn() {
       return makeBtn("Remove", "markup-sidebar-btn-danger", function () {
@@ -512,24 +508,42 @@ var Sidebar = (function () {
           }),
         );
       }
+      // Scoped to the caller's own notes, exactly like Persist.clearAll: a
+      // shared canvas must never let "Remove all" reach into another
+      // reviewer's entries. The label/confirm count only owned entries; any
+      // skipped others are called out in the same style as clearAll's toast.
+      var ownedItems = items.filter(Persist.ownsAnnotation);
       bulk.appendChild(
         makeBtn(
-          "Remove all (" + items.length + ")",
+          "Remove all (" + ownedItems.length + ")",
           "markup-sidebar-btn-danger",
           function () {
+            if (ownedItems.length === 0) {
+              if (typeof Toast !== "undefined") {
+                Toast.show("No annotations of yours to remove.", 2500);
+              }
+              return;
+            }
             if (
               !confirm(
                 "Remove all " +
-                  items.length +
-                  " " +
+                  ownedItems.length +
+                  " of your " +
                   status +
                   " annotations? This cannot be undone.",
               )
             )
               return;
-            items.slice().forEach(function (a) {
+            var skipped = items.length - ownedItems.length;
+            ownedItems.slice().forEach(function (a) {
               if (handlers.onRemove) handlers.onRemove(a);
             });
+            if (skipped > 0 && typeof Toast !== "undefined") {
+              Toast.show(
+                "Removed your " + ownedItems.length + "; " + skipped + " from others kept",
+                3000,
+              );
+            }
           },
         ),
       );
@@ -567,7 +581,7 @@ var Sidebar = (function () {
   }
 
   // Review-pass order inside each section: on a shared canvas, notes you
-  // haven't seen from other reviewers come first, then theirs, then yours —
+  // haven't seen from other reviewers come first, then theirs, then yours,
   // so walking top-to-bottom covers the whole review without hunting.
   function ordered(items) {
     if (Persist.isRemote && Persist.isRemote() && Persist.reviewOrder) {
@@ -626,7 +640,7 @@ var Sidebar = (function () {
   }
 
   // Open the drawer landed on one annotation with its reply composer ready.
-  // The entry's own Reply button carries the wiring — click it.
+  // The entry's own Reply button carries the wiring: click it.
   function openReply(annoId) {
     open();
     for (var i = 0; i < walkList.length; i++) {
@@ -675,7 +689,7 @@ var Sidebar = (function () {
         message:
           "Source changed since your last review. " +
           state.pending.filter(function (a) { return a.carryReason === "source-changed"; }).length +
-          " annotations carried over — triage each.",
+          " annotations carried over; triage each.",
       });
     } else {
       setBanner(null);

@@ -124,7 +124,7 @@ var Modes = (function () {
         open.push(anno);
       }
       } catch (err) {
-        // One annotation must never abort the whole render — that would leave
+        // One annotation must never abort the whole render; that would leave
         // the drawer stale and the note invisible. Keep it visible in Open.
         if (typeof console !== "undefined") {
           console.warn("[markup] render skipped for", anno && anno.id, err);
@@ -164,8 +164,7 @@ var Modes = (function () {
   // it; anyone may resolve/re-open (contract: either party) and reply. Solo
   // mode owns everything.
   function ownsAnno(anno) {
-    if (!Persist.isRemote()) return true;
-    return !anno.author || anno.author === Persist.self();
+    return Persist.ownsAnnotation(anno);
   }
 
   // Reply from a popover: land in the drawer with this note's composer open.
@@ -180,7 +179,7 @@ var Modes = (function () {
   // with their author. Someone else's annotations get a distinct look.
   function decorateAuthored(anno) {
     if (!Persist.isRemote() || !anno.author) return;
-    // Scope to inline artifacts — the sidebar's entries carry the same
+    // Scope to inline artifacts: the sidebar's entries carry the same
     // data-anno-id and would otherwise shadow the pin in document order.
     var id = anno.id.replace(/"/g, "");
     var el = document.querySelector(
@@ -188,7 +187,7 @@ var Modes = (function () {
         '.markup-rect[data-anno-id="' + id + '"]',
     );
     if (!el) return;
-    el.setAttribute("title", anno.author + (anno.note ? " — " + anno.note : ""));
+    el.setAttribute("title", anno.author + (anno.note ? ": " + anno.note : ""));
     if (anno.author !== Persist.self()) el.classList.add("markup-authored-other");
   }
 
@@ -369,7 +368,7 @@ var Modes = (function () {
 
         var rangeText = sel.toString();
         // Wrap selection in a "pending" highlight so the user sees what they
-        // grabbed while writing the note. Clears native selection by design —
+        // grabbed while writing the note. Clears native selection by design;
         // pending highlight is the substitute.
         var pendingMark = wrapRangeInMark(range, "markup-span-pending");
         var anchorRect = pendingMark ? pendingMark.getBoundingClientRect() : rect;
@@ -658,7 +657,7 @@ var Modes = (function () {
 
   // ---- HIGHLIGHT MODE ---------------------------------------------------------
   // Selecting text while this mode is active immediately creates a highlight
-  // annotation — no popover, no note required. Clicking an existing highlight
+  // annotation, no popover, no note required. Clicking an existing highlight
   // reopens the popover so a note can be added or the annotation removed.
 
   function installHighlightSelectionListener() {

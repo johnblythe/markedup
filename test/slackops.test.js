@@ -1039,3 +1039,149 @@ test("stub API: author stamping, etag/304, replies, 404", async () => {
     server.close();
   }
 });
+
+test("stub API: cross-author PUT drives only status; author's content edits are refused", async () => {
+  const { server, url } = await startStub({});
+  try {
+    await fetch(`${url}/api/eng/audit/annotations/anno-y`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Markup-User": "john@launchdarkly.com" },
+      body: JSON.stringify({ mode: "pin", pinNum: 1, note: "first note", status: "open" }),
+    });
+
+    // Another identity rewriting the note's content is refused.
+    const noteEdit = await fetch(`${url}/api/eng/audit/annotations/anno-y`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Markup-User": "eng@launchdarkly.com" },
+      body: JSON.stringify({ mode: "pin", pinNum: 1, note: "edited", status: "open" }),
+    });
+    assert.equal(noteEdit.status, 403);
+    assert.match((await noteEdit.json()).error, /only john@launchdarkly.com can edit this note/);
+
+    // A cross-author PUT that keeps note/anchor/payload identical but tries
+    // to rewrite other fields (pinNum here) drives only status; everything
+    // else comes from the stored record.
+    const sneaky = await fetch(`${url}/api/eng/audit/annotations/anno-y`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Markup-User": "eng@launchdarkly.com" },
+      body: JSON.stringify({ mode: "pin", pinNum: 9, note: "first note", status: "accepted" }),
+    });
+    assert.equal(sneaky.status, 200);
+    const merged = await sneaky.json();
+    assert.equal(merged.pinNum, 1, "non-author cannot renumber a pin");
+    assert.equal(merged.note, "first note");
+    assert.equal(merged.status, "accepted", "the status transition still applies");
+    assert.equal(merged.author, "john@launchdarkly.com");
+    assert.equal(merged.lastEditedBy, "eng@launchdarkly.com");
+  } finally {
+    server.close();
+  }
+});
+
+test("stub API: DELETE is author-only, tombstones, and refuses resurrection", async () => {
+  const { server, url } = await startStub({});
+  try {
+    await fetch(`${url}/api/eng/audit/annotations/anno-z`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Markup-User": "john@launchdarkly.com" },
+      body: JSON.stringify({ mode: "pin", pinNum: 1, note: "note", status: "open" }),
+    });
+
+    // Another identity's DELETE is refused and the note survives.
+    const crossDel = await fetch(`${url}/api/eng/audit/annotations/anno-z`, {
+      method: "DELETE",
+      headers: { "X-Markup-User": "eng@launchdarkly.com" },
+    });
+    assert.equal(crossDel.status, 403);
+    assert.match((await crossDel.json()).error, /only john@launchdarkly.com can delete this note/);
+    const survived = await fetch(`${url}/api/eng/audit/annotations`);
+    assert.equal((await survived.json()).annotations.length, 1);
+
+    // The author's DELETE tombstones: gone from GET, PUT refuses
+    // resurrection (410), replies to it 404.
+    const del = await fetch(`${url}/api/eng/audit/annotations/anno-z`, {
+      method: "DELETE",
+      headers: { "X-Markup-User": "john@launchdarkly.com" },
+    });
+    assert.equal(del.status, 200);
+    assert.deepEqual(await del.json(), { ok: true, id: "anno-z" });
+
+    const list = await fetch(`${url}/api/eng/audit/annotations`);
+    assert.equal((await list.json()).annotations.length, 0);
+
+    const zombie = await fetch(`${url}/api/eng/audit/annotations/anno-z`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "pin", pinNum: 1, note: "note", status: "open" }),
+    });
+    assert.equal(zombie.status, 410);
+
+    const deadReply = await fetch(`${url}/api/eng/audit/annotations/anno-z/replies`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "hello?" }),
+    });
+    assert.equal(deadReply.status, 404);
+
+    // A DELETE for an id that never existed is also a 404.
+    const neverExisted = await fetch(`${url}/api/eng/audit/annotations/nope`, {
+      method: "DELETE",
+      headers: { "X-Markup-User": "john@launchdarkly.com" },
+    });
+    assert.equal(neverExisted.status, 404);
+  } finally {
+    server.close();
+  }
+});
+
+test("stub API: create-time pin/rect number arbitration", async () => {
+  const { server, url } = await startStub({});
+  try {
+    // Two viewers race inside one poll window and both propose pinNum 1;
+    // the second create is reassigned live-max + 1.
+    const first = await fetch(`${url}/api/eng/audit/annotations/anno-p1`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Markup-User": "john@launchdarkly.com" },
+      body: JSON.stringify({ mode: "pin", pinNum: 1, note: "a", status: "open" }),
+    });
+    assert.equal((await first.json()).pinNum, 1);
+
+    const second = await fetch(`${url}/api/eng/audit/annotations/anno-p2`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Markup-User": "eng@launchdarkly.com" },
+      body: JSON.stringify({ mode: "pin", pinNum: 1, note: "b", status: "open" }),
+    });
+    assert.equal(second.status, 200);
+    const secondBody = await second.json();
+    assert.equal(secondBody.pinNum, 2, "colliding pinNum is reassigned");
+
+    // A create with no number at all gets one minted too.
+    const unnumbered = await fetch(`${url}/api/eng/audit/annotations/anno-p3`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Markup-User": "john@launchdarkly.com" },
+      body: JSON.stringify({ mode: "pin", note: "c", status: "open" }),
+    });
+    assert.equal((await unnumbered.json()).pinNum, 3);
+
+    // Updates by the author never renumber: john edits anno-p1's note and
+    // pinNum 1 stays put even though it "collides" with itself.
+    const edit = await fetch(`${url}/api/eng/audit/annotations/anno-p1`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Markup-User": "john@launchdarkly.com" },
+      body: JSON.stringify({ mode: "pin", pinNum: 1, note: "edited", status: "open" }),
+    });
+    const editBody = await edit.json();
+    assert.equal(editBody.pinNum, 1);
+    assert.equal(editBody.note, "edited");
+
+    // rect numbers arbitrate independently of pin numbers.
+    const rect1 = await fetch(`${url}/api/eng/audit/annotations/anno-r1`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Markup-User": "john@launchdarkly.com" },
+      body: JSON.stringify({ mode: "rect", rectNum: 1, status: "open" }),
+    });
+    assert.equal((await rect1.json()).rectNum, 1);
+  } finally {
+    server.close();
+  }
+});

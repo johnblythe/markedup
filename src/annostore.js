@@ -26,7 +26,7 @@ function stateFor(status) {
   return "open";
 }
 
-// Result shape for handlers: { status, body } — body is JSON-serializable.
+// Result shape for handlers: { status, body }; body is JSON-serializable.
 function err(status, message) {
   return { status, body: { error: message } };
 }
@@ -43,15 +43,15 @@ function createAnnotationStore(sourcePath) {
     try {
       const parsed = JSON.parse(fs.readFileSync(docPath, "utf-8"));
       if (Array.isArray(parsed.annotations)) return { doc: parsed, corrupt: false };
-      console.error(`markup: ${docPath} has no annotations array — refusing to touch it`);
+      console.error(`markup: ${docPath} has no annotations array, refusing to touch it`);
     } catch (err) {
-      console.error(`markup: ${docPath} failed to parse — refusing to touch it:`, err.message);
+      console.error(`markup: ${docPath} failed to parse, refusing to touch it:`, err.message);
     }
     return { doc: { annotations: [] }, corrupt: true };
   }
 
   function corruptError() {
-    return err(500, `annotations file corrupt: ${docPath} — repair or remove it, then retry`);
+    return err(500, `annotations file corrupt: ${docPath}; repair or remove it, then retry`);
   }
 
   // Atomic replace (write tmp, rename) so a crash or a concurrent reader

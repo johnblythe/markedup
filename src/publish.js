@@ -1,16 +1,16 @@
-// `markup publish` / `markup pull` — the ldpub (shared canvas) integration.
+// `markup publish` / `markup pull`: the ldpub (shared canvas) integration.
 //
 // publish: uploads one HTML file to the ldpub Worker (v2 per-user namespace,
 //   PUT /api/sites/{user}/{project}/index.html) and refreshes the overlay
 //   assets the Worker injects into every served page.
 // pull: fetches the shared annotation set and writes the standard feedback
-//   bundle (markdown + PNGs) next to wherever you run it — the same bundle
+//   bundle (markdown + PNGs) next to wherever you run it, the same bundle
 //   the local "Export to disk" produces, so agents consume it unchanged.
 //
 // Auth, in order:
-//   1. Cloudflare Access service token (agents/CI) — LDPUB_CLIENT_ID/SECRET
+//   1. Cloudflare Access service token (agents/CI), LDPUB_CLIENT_ID/SECRET
 //      from the environment, then LDPUB_ENV_FILE, then ~/code/ldpub/.env.
-//   2. The caller's own Access SSO session via cloudflared (`markup login`) —
+//   2. The caller's own Access SSO session via cloudflared (`markup login`);
 //      no minted credentials, attribution is their real email.
 // Values are consumed, never printed.
 
@@ -62,12 +62,12 @@ function authHeaders(config, appUrl, { runner, interactive = process.stdin.isTTY
   }
   let token = Access.accessToken(appUrl, runner ? { runner } : {});
   if (!token && interactive && Access.cloudflaredAvailable(runner || undefined)) {
-    console.error("markup: no shared-canvas session — opening your browser to sign in");
+    console.error("markup: no shared-canvas session, opening your browser to sign in");
     token = Access.login(appUrl, runner ? { runner } : {});
   }
   if (!token) {
     throw new Error(
-      `not signed in to the shared canvas — run \`markup login\` ` +
+      `not signed in to the shared canvas; run \`markup login\` ` +
         `(${Access.cloudflaredAvailable(runner || undefined) ? "then retry" : Access.INSTALL_HINT})`,
     );
   }
@@ -80,6 +80,17 @@ function kebab(input) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+// serve.js's local API mount and the slackops registry fallback both derive
+// a slug from a source *filename* (extension included) that must never come
+// back empty, since it becomes a URL path segment. kebab() alone can't
+// promise that (a bare extension like ".html" kebabs to ""), so this is the
+// one place that layers the filename-specific strip and fallback on top of
+// the shared transform; every other slug (user, project, channel name) uses
+// kebab() directly.
+function slugFromSourceName(sourceName) {
+  return kebab(String(sourceName).replace(/\.[^.]+$/, "")) || "artifact";
 }
 
 async function apiFetch(config, method, apiPath, { headers, body } = {}) {
@@ -96,8 +107,8 @@ async function apiFetch(config, method, apiPath, { headers, body } = {}) {
   if (res.status >= 300 && res.status < 400) {
     throw new Error(
       config.clientId
-        ? "Access rejected the service token — check LDPUB_CLIENT_ID/SECRET (ldpub SETUP.md §5)"
-        : "Access rejected the session — run `markup login` and retry",
+        ? "Access rejected the service token; check LDPUB_CLIENT_ID/SECRET (ldpub SETUP.md §5)"
+        : "Access rejected the session; run `markup login` and retry",
     );
   }
   return res;
@@ -136,7 +147,7 @@ async function publish(file, opts = {}) {
   const user = kebab(opts.user || config.user || os.userInfo().username);
   const project = kebab(opts.project || stem);
   const title = opts.title || stem;
-  if (!user || !project) throw new Error("could not derive user/project — pass --user/--project");
+  if (!user || !project) throw new Error("could not derive user/project; pass --user/--project");
 
   // HTTP headers are ByteStrings: anything outside Latin-1 (em dashes,
   // curly quotes) would throw in fetch, so the listing title gets flattened.
@@ -220,6 +231,7 @@ module.exports = {
   loadConfig,
   parseCanvasUrl,
   kebab,
+  slugFromSourceName,
   authHeaders,
   ensureOverlayAssets,
   DEFAULT_LDPUB_URL,

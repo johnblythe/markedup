@@ -9,8 +9,8 @@
 //
 // State is saved after every side effect, so a crash or restart never
 // double-posts. The reply cursor only advances when a human message is
-// ingested — advancing it on our own mirrored posts would swallow any human
-// reply that raced in between.
+// ingested (advancing it on our own mirrored posts would swallow any human
+// reply that raced in between).
 
 const crypto = require("node:crypto");
 const registry = require("../registry");
@@ -75,7 +75,7 @@ async function runCycle({ state, stateDir, slack, api, archiveOnResolve, log, no
     // Reconcile before posting: a send that landed but timed out locally, or
     // a crash between send and save, must not double-post. The channel is
     // the source of truth for which markers already stand. Recent history
-    // suffices — an unsaved-but-landed post is by definition recent.
+    // suffices; an unsaved-but-landed post is by definition recent.
     let channelMarkers = null;
     if (newTopLevel.length) {
       try {

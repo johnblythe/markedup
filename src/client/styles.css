@@ -829,7 +829,7 @@ mark.markup-span.markup-authored-other {
   display: none;
 }
 
-/* Until a reply exists, the thread is just the Reply affordance — no rule. */
+/* Until a reply exists, the thread is just the Reply affordance (no rule). */
 .markup-sidebar-thread:not(:has(.markup-sidebar-reply)) {
   border-left: 0;
   padding-left: 0;
@@ -1006,7 +1006,7 @@ mark.markup-span.markup-authored-other {
   box-shadow: none;
 }
 
-/* Docked, popups open downward — the palette sits at the drawer's top. */
+/* Docked, popups open downward: the palette sits at the drawer's top. */
 #markup-toolbar.markup-toolbar-docked .markup-badge-panel {
   bottom: auto;
   top: 100%;
@@ -1269,7 +1269,7 @@ mark.markup-span.markup-authored-other {
 }
 
 /* Collapsed mode control: one button showing the current mode, expanding to a
-   picker — mirrors the export icon's anchored popup and its docked flip. */
+   picker; mirrors the export icon's anchored popup and its docked flip. */
 #markup-toolbar .markup-strip-mode {
   position: relative;
 }

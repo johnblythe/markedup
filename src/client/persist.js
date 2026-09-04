@@ -358,14 +358,17 @@ var Persist = (function () {
 
   // Remote mode only: poll for other players' changes. onChange fires only
   // when the shared set actually changed (etag moved). opts.isPaused defers
-  // the whole fetch — pausing BEFORE the etag advances, so a change that
-  // lands mid-edit still renders on the next unpaused tick.
+  // the annotation fetch (pausing BEFORE the etag advances, so a change that
+  // lands mid-edit still renders on the next unpaused tick), but presence
+  // keeps pinging on every tick regardless: it's how other viewers see you're
+  // still here even while a popover has your attention.
   function startPolling(sourceKey, onChange, opts) {
     if (!remote || pollTimer) return;
     opts = opts || {};
     onRemoteChange = onChange;
     pingPresence(opts.onPresence);
     pollTimer = setInterval(function () {
+      pingPresence(opts.onPresence);
       if (opts.isPaused && opts.isPaused()) return;
       // Defer while a write is in flight: the etag hasn't moved yet, so
       // fetching now could replace the cache with a list that predates the
@@ -378,7 +381,6 @@ var Persist = (function () {
         .catch(function () {
           /* transient poll failures are silent; next tick retries */
         });
-      pingPresence(opts.onPresence);
     }, opts.intervalMs || 10000);
   }
 
@@ -519,7 +521,7 @@ var Persist = (function () {
 
   // Deletion is irreversible on the shared canvas (the server tombstones the
   // id forever), so destructive ops are scoped to your own annotations. An
-  // annotation with no author yet is a local creation still syncing — yours.
+  // annotation with no author yet is a local creation still syncing (yours).
   function ownsAnnotation(anno) {
     return !anno.author || anno.author === selfEmail;
   }
@@ -564,7 +566,7 @@ var Persist = (function () {
   }
 
   // Review-pass ordering for the sidebar: notes you haven't seen from other
-  // reviewers first, then the rest of theirs, then your own — newest first
+  // reviewers first, then the rest of theirs, then your own; newest first
   // within each group. `sessionNewIds` is the sidebar's snapshot of newIds()
   // taken when it opened, so the order holds still while you read.
   function reviewOrder(list, sessionNewIds) {
@@ -580,14 +582,14 @@ var Persist = (function () {
     });
   }
 
-  // Human display label for an annotation's lifecycle. DISPLAY ONLY — the
+  // Human display label for an annotation's lifecycle. DISPLAY ONLY: the
   // stored status values (open/pending/accepted) are the wire contract and
   // never change here.
   function displayStatus(anno) {
     var status = anno.status || "open";
     if (status === "accepted") return "Resolved";
     if (status === "pending") {
-      if (anno.carryReason === "anchor-lost") return "Moved — re-attach";
+      if (anno.carryReason === "anchor-lost") return "Moved: re-attach";
       if (anno.carryReason === "source-changed") return "From earlier version";
       return "Needs another look";
     }
@@ -604,7 +606,7 @@ var Persist = (function () {
 
   // Source-hash stash: per-source last-known content hash. Used to detect
   // "source changed since last review" so existing open annotations can be
-  // bumped to pending state for triage. Local mode only — in remote mode the
+  // bumped to pending state for triage. Local mode only: in remote mode the
   // server's copy is shared, so per-browser triage would fight across players.
   function hashKey(sourceKey) {
     return "markup:source-hash:" + sourceKey;
@@ -646,5 +648,6 @@ var Persist = (function () {
     presence: presence,
     reviewOrder: reviewOrder,
     displayStatus: displayStatus,
+    ownsAnnotation: ownsAnnotation,
   };
 })();

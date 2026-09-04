@@ -315,7 +315,7 @@ test(
     const put = await api(base, "PUT", "/api/local/report/annotations/anno-e2", { body: PIN });
     assert.strictEqual(put.status, 500);
 
-    // The bad bytes are untouched — nothing silently rewrote the review.
+    // The bad bytes are untouched; nothing silently rewrote the review.
     assert.strictEqual(fs.readFileSync(docPath, "utf-8"), corrupt);
 
     // Repairing the file brings the API back.

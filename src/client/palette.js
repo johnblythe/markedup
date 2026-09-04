@@ -209,15 +209,17 @@ var Palette = (function () {
     document.body.appendChild(scrimEl);
     document.body.appendChild(modalEl);
 
-    // Capture phase + explicit consume on Escape: the palette owns these
-    // keys while it's open, ahead of any other document-level handler.
-    document.addEventListener(
+    // Window capture + explicit consume on Escape: the palette owns these
+    // keys while it's open. Window (not document) because the keyboard-
+    // isolation shield stops propagation at window for keys typed in the
+    // palette's own input; same-node listeners still fire.
+    window.addEventListener(
       "keydown",
       function (e) {
         if (!isOpenFlag) return;
         if (e.key === "Escape") {
           e.preventDefault();
-          e.stopPropagation();
+          e.stopImmediatePropagation();
           close();
         } else if (e.key === "ArrowDown") {
           e.preventDefault();
