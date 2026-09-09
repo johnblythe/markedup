@@ -37,6 +37,9 @@ in the local sandbox.
 
 ## Running it
 
+README's "Shared canvas (multiplayer)" section is the canonical how-to;
+this is the operator's summary. When the CLI changes, update README first.
+
 - **Local sandbox**: `markup serve <file> --multiplayer` prints two persona
   URLs; open both in tabs to review as two identities.
 - **Publish**: reviewers just open the canvas URL behind LD SSO. Publishers:

@@ -136,9 +136,14 @@ produced. `/markup list`, `/markup dash`, and `/markup stop` map to the CLI.
 
 Publish an artifact once and review it together at one URL — every
 reviewer sees everyone's pins, highlights, and rects, attributed, within
-about ten seconds. Backed by an [ldpub](https://github.com/johnblythe/ldpub)
+about ten seconds. Backed by an [ldpub](https://github.com/launchdarkly-labs/ldpub)
 Worker (Cloudflare Access gated); reviewers need no setup beyond opening
 the link and passing the email gate.
+
+This section is the canonical how-to. For the state of the multiplayer
+path (what shipped, architecture, parked backlog) see
+[docs/multiplayer.md](docs/multiplayer.md); the wire contract lives at
+[docs/multiplayer-contract.md](docs/multiplayer-contract.md).
 
 ```bash
 markup publish path/to/report.html --title "Q3 Report"

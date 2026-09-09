@@ -1,10 +1,15 @@
 # Marked Up multiplayer: wire contract
 
 > **Status (2026-09-09):** ratified and shipped. The v1 freeze below is kept
-> verbatim as the normative baseline; everything since is in the amendments
-> list. Reference implementations: `src/annostore.js` (local, authoritative
-> for semantics), `test/stub-api.js` (test mirror), and the ldpub Worker
-> (production, `launchdarkly-labs/ldpub` `src/annotations.ts`).
+> verbatim as the normative baseline (including its same-day desk RULING,
+> which was part of the frozen file); everything since is in the amendments
+> list. **Do not implement from the frozen blocks alone**: the route listing
+> and the `mode` enum both have amended forms above them. Reference
+> implementations: `src/annostore.js` (local, authoritative for semantics),
+> `test/stub-api.js` (test mirror), and the ldpub Worker (production,
+> `launchdarkly-labs/ldpub` `src/annotations.ts`). For live Slack-bridge
+> behavior, `docs/slack-ops.md` is the runbook; the fork-8 section below is
+> the frozen plan.
 
 ## Amendments since the v1 freeze
 
@@ -24,6 +29,8 @@
   last-seen; `GET` reads without recording.
 - Shots: `GET/PUT /api/{user}/{project}/shots/{annoId}.png`; the server
   strips inline `pngDataURL` from annotation payloads on every PUT.
+- Local-sandbox identity: `?persona=` is the primary query param and wins
+  when both are present; the freeze's `?as=` survives as an older alias.
 
 ---
 
