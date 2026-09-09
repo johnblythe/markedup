@@ -1,5 +1,5 @@
 // Node-side annotation store backing the local annotations API (the "stub"
-// in the multiplayer contract, tmp/multiplayer-contract.md). Semantics mirror
+// in the multiplayer contract, docs/multiplayer-contract.md). Semantics mirror
 // the ldpub Worker exactly:
 //   - one JSON doc per source file: <source>.annotations.json (tombstones kept)
 //   - server stamps author/createdAt/updatedAt, mirrors status -> state

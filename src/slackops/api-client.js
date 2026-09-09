@@ -1,5 +1,5 @@
 // Client for the multiplayer annotations API (contract:
-// tmp/multiplayer-contract.md in the repo root of the orchestration session).
+// docs/multiplayer-contract.md).
 // Works against the local stub (X-Markup-User header names the caller) and
 // the ldpub Worker (Cloudflare Access service-token headers, taken from the
 // environment and never logged).

@@ -1,5 +1,5 @@
 // In-memory stub of the multiplayer annotations API contract
-// (tmp/multiplayer-contract.md). Used by the slackops tests and runnable
+// (docs/multiplayer-contract.md). Used by the slackops tests and runnable
 // standalone so the Slack bridge can be exercised without the ldpub Worker:
 //
 //   node test/stub-api.js --port 7999 --seed seed.json

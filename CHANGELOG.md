@@ -9,6 +9,11 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Added
 
+- The multiplayer paper trail is versioned: the frozen wire contract and its
+  post-freeze amendments live at `docs/multiplayer-contract.md` (previously
+  only in gitignored `tmp/`), `docs/multiplayer.md` records the state of the
+  path (what shipped, architecture, runbooks, parked backlog), and the
+  original ideation one-pager is preserved under `docs/brainstorms/` (#8).
 - Tokenless publish/pull: `markup login` signs a person into the shared
   canvas with their own SSO (via cloudflared), and `markup publish` /
   `markup pull` ride that session automatically — no minted service tokens

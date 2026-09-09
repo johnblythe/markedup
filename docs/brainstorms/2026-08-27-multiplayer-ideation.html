@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marked Up, Multiplayer</title>
+<style>
+/* ==== gazette.css :root — pasted verbatim from ~/dotfiles/claude/design-language/css/gazette.css ==== */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,700;9..144,900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root {
+  --paper:    #f7f1e3;
+  --paper-2:  #efe7d2;
+  --ink:      #1a1614;
+  --ink-2:    #3a322c;
+  --rule:     #1a1614;
+  --muted:    #6b6357;
+  --accent:   #b23a1f;
+  --accent-2: #7a2613;
+  --gold:     #a8801f;
+  --green:    #4a6b3a;
+  --slate:    #3d4a5c;
+
+  --serif: 'Fraunces', Charter, 'Source Serif Pro', Georgia, serif;
+  --sans:  'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --mono:  'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+  --ground:      var(--paper);
+  --surface:     var(--paper-2);
+  --surface-2:   var(--paper-2);
+  --accent-soft: var(--paper-2);
+
+  --hairline: rgba(26, 22, 20, 0.15);
+  --grid: var(--hairline);
+  --axis: var(--muted);
+
+  --tip-radius: 3px;
+  --tip-size:   0.8rem;
+
+  --highlight:      rgba(218, 165, 32, 0.35);
+  --highlight-stop: 55%;
+}
+
+/* gazette type + components (gazette.css) */
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); }
+.masthead { border-top: 6px double var(--rule); border-bottom: 6px double var(--rule); }
+h1, h2, h3 { font-family: var(--serif); }
+.lede { font-size: 16.5px; color: var(--ink-2); line-height: 1.55; }
+.sec-note { font-size: 15.5px; color: var(--ink-2); }
+.tok { font-family: var(--mono); background: var(--paper-2); padding: 2px 6px; border-radius: 2px; }
+.gz-card { background: var(--paper-2); border: 1px solid var(--hairline); border-radius: 3px; padding: 22px 26px; }
+.gz-card--lead { border-left: 4px solid var(--accent); }
+.container { max-width: 1180px; margin: 0 auto; }
+
+/* ==== house.css components (subset used on this page, pasted from ~/dotfiles/claude/design-language/css/house.css) ==== */
+table, .tnum, [class*="stat"], [class*="numeral"], [class*="figure"] { font-variant-numeric: tabular-nums; }
+
+.eyebrow {
+  font-family: var(--mono);
+  text-transform: uppercase;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+}
+.eyebrow--muted { color: var(--muted); }
+.eyebrow--rule::after { content: ""; flex: 1 1 auto; max-width: 120px; height: 1px; background: var(--rule); }
+
+.hl {
+  background: linear-gradient(transparent var(--highlight-stop, 55%), var(--highlight) var(--highlight-stop, 55%));
+  font-weight: 700;
+}
+.hl-plain { font-weight: 700; color: var(--ink); }
+
+.honesty {
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  padding: 1.1rem 1.3rem;
+  color: var(--ink-2);
+}
+.honesty > .eyebrow { margin-bottom: 0.6rem; }
+
+.callout { border-left: 3px solid var(--accent); padding-left: 1.1rem; color: var(--ink-2); }
+.callout--quote {
+  background: var(--surface);
+  border-left-width: 3px;
+  padding: 1.1rem 1.3rem;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink);
+}
+
+.colophon {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding-top: 1.2rem;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  line-height: 1.9;
+}
+
+.prose { max-width: 68ch; }
+.prose-wide { max-width: 76ch; }
+
+/* ==== artifact layout ==== */
+* { box-sizing: border-box; margin: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body { font-size: 16px; line-height: 1.6; padding: 0 28px 64px; }
+
+.masthead { padding: 30px 0 26px; margin-bottom: 40px; }
+.masthead .eyebrow { font-size: 0.78rem; letter-spacing: 0.16em; margin-bottom: 14px; }
+.masthead h1 { font-size: 44px; font-weight: 900; line-height: 1.08; letter-spacing: -0.01em; }
+.dateline { font-family: var(--mono); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-top: 12px; }
+.masthead .lede { margin-top: 18px; }
+
+section { margin-bottom: 52px; }
+section > .eyebrow { font-size: 0.78rem; letter-spacing: 0.16em; margin-bottom: 8px; }
+section h2 { font-size: 27px; font-weight: 700; margin-bottom: 14px; }
+section h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+p + p { margin-top: 0.8em; }
+
+.cols-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: stretch; }
+.cols-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; align-items: stretch; }
+.cols-2 > .gz-card p, .cols-3 > .gz-card p { font-size: 15.5px; color: var(--ink-2); }
+.gz-card h3 .tok { font-size: 0.82em; }
+.gz-card ul { padding-left: 1.15rem; font-size: 15.5px; color: var(--ink-2); }
+.gz-card li + li { margin-top: 0.45em; }
+
+/* current-loop strip */
+.loop-strip { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; margin: 18px 0 14px; }
+.loop-step {
+  flex: 1 1 130px;
+  background: var(--paper-2);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  padding: 12px 14px;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+.loop-step .step-label { font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); display: block; margin-bottom: 4px; }
+.loop-step--pain { border-left: 3px solid var(--accent); }
+.loop-join { align-self: center; font-family: var(--mono); color: var(--muted); flex: 0 0 auto; }
+
+/* options table */
+.board-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.board-table th {
+  font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--muted); text-align: left; padding: 8px 12px 8px 0;
+  border-bottom: 2px solid var(--rule);
+}
+.board-table td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--hairline); vertical-align: top; color: var(--ink-2); }
+.board-table td:first-child { font-family: var(--mono); color: var(--muted); }
+.board-table .idea { color: var(--ink); font-weight: 600; }
+.board-table .idea small { display: block; font-weight: 400; color: var(--ink-2); margin-top: 2px; }
+.verdict { font-family: var(--mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
+.verdict--build { color: var(--accent); font-weight: 600; }
+.verdict--later { color: var(--gold); font-weight: 600; }
+.verdict--stopgap { color: var(--slate); }
+.verdict--pass { color: var(--muted); }
+.table-scroll { overflow-x: auto; }
+
+/* architecture diagram */
+.diagram { display: grid; grid-template-columns: 1fr auto 1.2fr auto 1fr; gap: 0 14px; align-items: center; margin: 22px 0 8px; }
+.dg-node { background: var(--paper-2); border: 1px solid var(--hairline); border-radius: 3px; padding: 14px 16px; font-size: 15px; }
+.dg-node .step-label { font-family: var(--mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); display: block; margin-bottom: 5px; }
+.dg-node--worker { border: 1px solid var(--accent); border-left: 4px solid var(--accent); }
+.dg-arrow { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); text-align: center; line-height: 1.7; white-space: nowrap; }
+.dg-arrow b { color: var(--ink); font-size: 1.05rem; display: block; }
+.dg-stack { display: flex; flex-direction: column; align-items: stretch; }
+.dg-vline { width: 1px; background: var(--rule); height: 22px; margin: 0 auto; }
+.dg-r2 { background: var(--paper); border: 1px dashed var(--muted); border-radius: 3px; padding: 12px 16px; font-family: var(--mono); font-size: 0.76rem; color: var(--ink-2); line-height: 1.8; }
+
+pre.model {
+  font-family: var(--mono); font-size: 0.8rem; line-height: 1.7;
+  background: var(--paper-2); border: 1px solid var(--hairline); border-radius: 3px;
+  padding: 16px 18px; overflow-x: auto; color: var(--ink-2);
+}
+pre.model .new { color: var(--accent-2); font-weight: 600; }
+
+.unit-tag {
+  font-family: var(--mono); font-size: 0.62rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--accent-2); border: 1px solid var(--hairline); border-radius: 2px;
+  padding: 1px 5px; margin-left: 6px; white-space: nowrap;
+}
+
+/* sequence diagram */
+.seq-scroll { overflow-x: auto; margin: 20px 0 6px; }
+.seq-scroll svg { min-width: 900px; }
+.sq-life { stroke: var(--hairline); stroke-width: 1; stroke-dasharray: 4 4; }
+.sq-head { fill: var(--paper-2); stroke: var(--hairline); rx: 3; }
+.sq-head--worker { stroke: var(--accent); stroke-width: 1.4; }
+.sq-head--r2 { fill: var(--paper); stroke: var(--muted); stroke-dasharray: 5 3; }
+.sq-name { font: 600 13.5px var(--sans); fill: var(--ink); text-anchor: middle; }
+.sq-sub { font: 400 10.5px var(--mono); fill: var(--muted); text-anchor: middle; }
+.sq-msg { stroke: var(--ink); stroke-width: 1.4; marker-end: url(#ah); }
+.sq-msg--sub { stroke: var(--muted); stroke-width: 1.1; marker-end: url(#ahm); }
+.sq-ret { stroke: var(--muted); stroke-width: 1.1; stroke-dasharray: 5 4; marker-end: url(#ahm); }
+.sq-label { font: 400 11.5px var(--mono); fill: var(--ink-2); text-anchor: middle; }
+.sq-label--muted { font-size: 10.5px; fill: var(--muted); }
+.sq-num-c { fill: var(--accent); }
+.sq-num-t { font: 700 11px var(--mono); fill: var(--paper); text-anchor: middle; }
+.sq-note { fill: var(--paper); stroke: var(--hairline); }
+.sq-note-t { font: 600 10.5px var(--mono); fill: var(--accent-2); text-anchor: middle; }
+#ah path { fill: var(--ink); }
+#ahm path { fill: var(--muted); }
+
+.phase-num { font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); display: block; margin-bottom: 6px; }
+
+@media (max-width: 940px) {
+  .cols-2, .cols-3 { grid-template-columns: 1fr; }
+  .diagram { grid-template-columns: 1fr; gap: 10px; }
+  .dg-arrow b { display: inline; margin-right: 8px; }
+  .masthead h1 { font-size: 34px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header class="masthead">
+    <div class="eyebrow">Ideation brief · Marked Up × ldpub</div>
+    <h1>Marked Up, multiplayer</h1>
+    <div class="dateline">2026-08-27 · for John · decision requested: pick the build</div>
+    <p class="lede prose-wide">An engineer finishes a 486&nbsp;KB board audit and the only way to review it together is to slack the raw file, download it, and annotate alone. The document is shared; the conversation is not. This brief lays out the ways to make Marked Up a shared canvas, and argues that <span class="hl">the two systems you already own are one annotation API away from multiplayer</span>.</p>
+  </header>
+
+  <section>
+    <div class="eyebrow eyebrow--rule">01 · The loop today</div>
+    <h2>Single player, sneakernet edition</h2>
+    <div class="loop-strip">
+      <div class="loop-step"><span class="step-label">agent</span>writes audit.html</div>
+      <div class="loop-join">→</div>
+      <div class="loop-step loop-step--pain"><span class="step-label">slack</span>raw file attachment</div>
+      <div class="loop-join">→</div>
+      <div class="loop-step loop-step--pain"><span class="step-label">you</span>download, <code class="tok">markup</code>, annotate alone</div>
+      <div class="loop-join">→</div>
+      <div class="loop-step"><span class="step-label">export</span>markdown + PNG bundle</div>
+      <div class="loop-join">→</div>
+      <div class="loop-step"><span class="step-label">slack again</span>bundle back to his agent</div>
+    </div>
+    <p class="sec-note prose-wide">The annotation layer itself is not the problem. The problem is that <span class="hl">annotations never leave the reviewer's browser</span>: they live in localStorage keyed to a local file path, so there is no URL two people can stand on at once, no attribution, and no thread.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow eyebrow--rule">02 · What already exists</div>
+    <h2>Two systems, one seam</h2>
+    <div class="cols-2">
+      <div class="gz-card">
+        <h3>Marked Up <code class="tok">~/code/markup</code></h3>
+        <ul>
+          <li>Overlay with three modes (text span, pin, rect + screenshot), served by a local Node process; source HTML never modified.</li>
+          <li>All persistence flows through <code class="tok">persist.js</code>, a nine-function localStorage adapter. Swap that one module and every mode syncs remotely without knowing it.</li>
+          <li>Already handles source-change detection (content hash → stale annotations flagged for triage) and exports a feedback bundle agents can act on.</li>
+        </ul>
+      </div>
+      <div class="gz-card">
+        <h3>ldpub <code class="tok">~/code/ldpub</code></h3>
+        <ul>
+          <li>Cloudflare Worker + R2 publishing, gated to <code class="tok">@launchdarkly.com</code> by Zero Trust Access. Per-user namespaces: <code class="tok">/{user}/{project}/</code>.</li>
+          <li>The Worker independently verifies the Access JWT and gets back the caller's <code class="tok">email</code>. Every request arrives authenticated.</li>
+          <li>Publish CLI with service tokens, stable URLs on republish, R2 metadata layer already in place.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="callout--quote callout" style="margin-top:20px;">Hosting, auth, identity, and the annotation UI are all built. The missing piece is a place annotations live that both browsers can read and write. That is one JSON file in R2 and two Worker routes.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow eyebrow--rule">03 · The board</div>
+    <h2>Eight ways to make it multiplayer</h2>
+    <div class="table-scroll">
+    <table class="board-table">
+      <thead>
+        <tr><th>#</th><th style="min-width:260px">Idea</th><th>Shared canvas</th><th>Identity</th><th>New infra</th><th>First review</th><th>Verdict</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td class="idea">ldpub grows an annotations API<small>Worker stores annotations in R2, serves the overlay on published pages, stamps authors from the Access JWT. Client polls.</small></td>
+          <td>Yes, polled</td><td>Free (JWT email)</td><td>None</td><td class="tnum">Today</td>
+          <td><span class="verdict verdict--build">Build today</span></td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td class="idea">Tunnel to your laptop<small>cloudflared or Tailscale Funnel in front of local <code class="tok">markup serve</code>. Zero code, but each viewer's notes stay in their own localStorage; he'd annotate a canvas you can't see.</small></td>
+          <td>No</td><td>None</td><td>None</td><td class="tnum">30 min</td>
+          <td><span class="verdict verdict--stopgap">Stopgap demo</span></td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td class="idea">Git as the wire<small><code class="tok">markup push / pull</code>: annotations as portable JSON in a repo or gist, each side serves locally, sync is a commit. Offline-proof and versioned forever, but manual and two sources of truth.</small></td>
+          <td>Async, per sync</td><td>Git author</td><td>None</td><td class="tnum">Today</td>
+          <td><span class="verdict verdict--stopgap">Fallback pattern</span></td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td class="idea">Apps Script route<small>Publish on the legacy GAS path, store annotations in a Sheet via <code class="tok">doPost</code>. Works, but ldpub exists specifically to retire this path.</small></td>
+          <td>Yes, polled</td><td>Google session</td><td>None (legacy)</td><td class="tnum">1–2 days</td>
+          <td><span class="verdict verdict--pass">Pass</span></td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td class="idea">Vercel rebuild<small>Functions + KV clone of option 1, minus the domain gating you already have. Reproduces owned infra on rented infra.</small></td>
+          <td>Yes</td><td>Roll your own</td><td>New stack</td><td class="tnum">Days</td>
+          <td><span class="verdict verdict--pass">Pass</span></td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td class="idea">AWS<small>S3 + Lambda + Cognito or ALB/OIDC. The corporate-account entanglement you already called wily.</small></td>
+          <td>Yes</td><td>Cognito</td><td>Most of any option</td><td class="tnum">Week+</td>
+          <td><span class="verdict verdict--pass">Pass</span></td>
+        </tr>
+        <tr>
+          <td>7</td>
+          <td class="idea">Durable Objects realtime<small>WebSocket per document: live cursors, presence, notes appearing as they're typed. The Figma register. Async review doesn't need it yet.</small></td>
+          <td>Yes, live</td><td>Same JWT</td><td>DO binding</td><td class="tnum">Later</td>
+          <td><span class="verdict verdict--later">Phase 3</span></td>
+        </tr>
+        <tr>
+          <td>8</td>
+          <td class="idea">Slack companion loop<small>Worker pings a channel when notes land; export bundles auto-post to the thread. Not a canvas, but it is where the team already talks.</small></td>
+          <td>No (notify only)</td><td>Slack</td><td>Webhook</td><td class="tnum">Today</td>
+          <td><span class="verdict verdict--later">Phase 2 add-on</span></td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="sec-note prose-wide" style="margin-top:14px;">Options 4 through 6 all rebuild something ldpub already does, on worse terms. Option 2 is worth knowing about for the day the Worker is down. <span class="hl">Option 1 is the only path that is both multiplayer and shippable today</span>, and options 7 and 8 stack on top of it rather than competing with it.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow eyebrow--rule">04 · The build</div>
+    <h2>Teach ldpub to hold the conversation</h2>
+    <p class="prose-wide">The Worker wraps published HTML with the Marked Up overlay at serve time, exactly as the local server does today (the wrapper is already idempotent). The client swaps its localStorage adapter for a remote driver speaking to two new routes. Authorship is stamped server-side from the verified JWT, so <span class="hl">nobody logs into anything; being on the page is being signed in</span>.</p>
+
+    <div class="diagram">
+      <div class="dg-node">
+        <span class="step-label">Engineer's browser <span class="unit-tag">unit B</span></span>
+        overlay client<br><span style="font-family:var(--mono);font-size:0.74rem;color:var(--muted);">annotates, replies</span>
+      </div>
+      <div class="dg-arrow"><b>⇄</b>PUT on save<br>GET poll ~10 s</div>
+      <div class="dg-stack">
+        <div class="dg-node dg-node--worker">
+          <span class="step-label">ldpub Worker <span class="unit-tag">unit A</span></span>
+          Cloudflare Access · OTP to LD email<br>
+          <span style="font-family:var(--mono);font-size:0.74rem;color:var(--muted);">verifies JWT → author email · wraps HTML with overlay · annotations API</span>
+        </div>
+        <div class="dg-vline"></div>
+        <div class="dg-r2">R2 · sites/{user}/{proj}/index.html<br>R2 · annotations/{user}/{proj}.json<br>R2 · shots/{user}/{proj}/*.png</div>
+      </div>
+      <div class="dg-arrow"><b>⇄</b>PUT on save<br>GET poll ~10 s</div>
+      <div class="dg-node">
+        <span class="step-label">Your browser <span class="unit-tag">unit B</span></span>
+        same URL, same overlay<br><span style="font-family:var(--mono);font-size:0.74rem;color:var(--muted);">his pins, your pins, attributed</span>
+      </div>
+    </div>
+    <p class="sec-note" style="font-family:var(--mono);font-size:0.76rem;color:var(--muted);margin-bottom:26px;">in: agent writes html → <code class="tok">markup publish</code> (service token) <span class="unit-tag">unit C</span> · out: <code class="tok">markup pull &lt;url&gt;</code> → feedback bundle → his agent <span class="unit-tag">unit C</span></p>
+
+    <h3>The wire, step by step</h3>
+    <p class="prose-wide sec-note">Two endpoints carry all of it. <span class="hl-plain">GET</span> asks the Worker for every note on the doc; <span class="hl-plain">PUT</span> hands it one note to keep. Here is the full exchange when you review his audit:</p>
+
+    <div class="seq-scroll">
+    <svg viewBox="0 0 1120 552" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sequence diagram of the annotation GET and PUT flow">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
+        <marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+
+      <!-- lifeline headers -->
+      <rect class="sq-head" x="60" y="6" width="190" height="46" rx="3"/>
+      <text class="sq-name" x="155" y="26">John's browser</text>
+      <text class="sq-sub" x="155" y="42">reviewer · unit B</text>
+
+      <rect class="sq-head sq-head--worker" x="380" y="6" width="190" height="46" rx="3"/>
+      <text class="sq-name" x="475" y="26">ldpub Worker</text>
+      <text class="sq-sub" x="475" y="42">Access JWT → email · unit A</text>
+
+      <rect class="sq-head sq-head--r2" x="645" y="6" width="160" height="46" rx="3"/>
+      <text class="sq-name" x="725" y="26">R2 bucket</text>
+      <text class="sq-sub" x="725" y="42">audit.json · unit A</text>
+
+      <rect class="sq-head" x="910" y="6" width="190" height="46" rx="3"/>
+      <text class="sq-name" x="1005" y="26">Engineer's browser</text>
+      <text class="sq-sub" x="1005" y="42">author, polling · unit B</text>
+
+      <!-- lifelines -->
+      <line class="sq-life" x1="155" y1="56" x2="155" y2="540"/>
+      <line class="sq-life" x1="475" y1="56" x2="475" y2="540"/>
+      <line class="sq-life" x1="725" y1="56" x2="725" y2="540"/>
+      <line class="sq-life" x1="1005" y1="56" x2="1005" y2="540"/>
+
+      <!-- 1 · open the page -->
+      <text class="sq-label" x="315" y="88">GET /eng/audit/</text>
+      <line class="sq-msg" x1="155" y1="100" x2="467" y2="100"/>
+      <circle class="sq-num-c" cx="172" cy="100" r="10"/><text class="sq-num-t" x="172" y="104">1</text>
+      <text class="sq-label sq-label--muted" x="315" y="116">first visit only: one-time email code (Access)</text>
+
+      <text class="sq-label sq-label--muted" x="596" y="134">read sites/eng/audit/index.html</text>
+      <line class="sq-msg--sub" x1="475" y1="144" x2="717" y2="144"/>
+      <line class="sq-ret" x1="725" y1="164" x2="483" y2="164"/>
+
+      <text class="sq-label" x="315" y="184">HTML + overlay injected at serve time</text>
+      <line class="sq-msg" x1="475" y1="196" x2="163" y2="196"/>
+      <circle class="sq-num-c" cx="458" cy="196" r="10"/><text class="sq-num-t" x="458" y="200">2</text>
+
+      <!-- 3 · hydrate -->
+      <text class="sq-label" x="315" y="234">GET /api/eng/audit/annotations</text>
+      <line class="sq-msg" x1="155" y1="246" x2="467" y2="246"/>
+      <circle class="sq-num-c" cx="172" cy="246" r="10"/><text class="sq-num-t" x="172" y="250">3</text>
+
+      <text class="sq-label sq-label--muted" x="596" y="264">read annotations/eng/audit.json</text>
+      <line class="sq-msg--sub" x1="475" y1="274" x2="717" y2="274"/>
+      <line class="sq-ret" x1="725" y1="292" x2="483" y2="292"/>
+
+      <text class="sq-label" x="315" y="310">JSON array → every pin renders, author chips</text>
+      <line class="sq-msg" x1="475" y1="322" x2="163" y2="322"/>
+
+      <!-- 4 · save a note -->
+      <text class="sq-label" x="315" y="352">PUT /api/eng/audit/annotations/anno-7f2</text>
+      <line class="sq-msg" x1="155" y1="364" x2="467" y2="364"/>
+      <circle class="sq-num-c" cx="172" cy="364" r="10"/><text class="sq-num-t" x="172" y="368">4</text>
+      <text class="sq-label sq-label--muted" x="315" y="380">{ mode: pin, cssPath, note }</text>
+
+      <rect class="sq-note" x="365" y="390" width="220" height="24" rx="2"/>
+      <text class="sq-note-t" x="475" y="406">author = john@launchdarkly.com (JWT)</text>
+
+      <text class="sq-label sq-label--muted" x="596" y="434">merge by id → write audit.json</text>
+      <line class="sq-msg" x1="475" y1="444" x2="717" y2="444"/>
+      <line class="sq-ret" x1="475" y1="464" x2="163" y2="464"/>
+      <text class="sq-label sq-label--muted" x="315" y="458">200 · saved</text>
+
+      <!-- 5 · the other side polls -->
+      <text class="sq-label" x="742" y="490">GET /api/eng/audit/annotations · If-None-Match (~10 s)</text>
+      <line class="sq-msg" x1="1005" y1="502" x2="483" y2="502"/>
+      <circle class="sq-num-c" cx="988" cy="502" r="10"/><text class="sq-num-t" x="988" y="506">5</text>
+
+      <text class="sq-label" x="742" y="522">200 + JSON → your pin appears, tagged john@ (304 when quiet)</text>
+      <line class="sq-msg" x1="475" y1="532" x2="997" y2="532"/>
+    </svg>
+    </div>
+    <p class="sec-note" style="font-family:var(--mono);font-size:0.76rem;color:var(--muted);margin-bottom:26px;">markup pull &lt;url&gt; is step 3 run from a terminal: same GET, written to disk as the standard feedback bundle for his agent.</p>
+
+    <div class="cols-2">
+      <div class="gz-card">
+        <h3>Annotation record, extended</h3>
+<pre class="model">{ id, mode, cssPath, note, pinNum,   // existing
+  <span class="new">author</span>:    "eng@launchdarkly.com", // stamped by Worker
+  <span class="new">createdAt</span>, <span class="new">updatedAt</span>,
+  <span class="new">state</span>:     "open | resolved | pending",
+  <span class="new">replies</span>:   [{ author, text, at }] // phase 2
+}</pre>
+        <p style="margin-top:10px;">Merge is last-write-wins per annotation id; ids are already collision-safe. Rect screenshots move to R2 objects instead of inline data URIs.</p>
+      </div>
+      <div class="gz-card gz-card--lead">
+        <h3>Today's work, four units</h3>
+        <ul>
+          <li><span class="hl-plain">Unit A · Worker:</span> <code class="tok">GET/PUT …/annotations</code> + <code class="tok">GET /api/me</code>, JSON in R2, serve-time overlay injection. The middle lane, steps 1 through 4.</li>
+          <li><span class="hl-plain">Unit B · Client:</span> remote persist driver with the same nine-function surface, ETag polling, author chips on pins and popovers. The browser lanes, steps 3 through 5.</li>
+          <li><span class="hl-plain">Unit C · CLI:</span> <code class="tok">markup publish &lt;file&gt;</code> gets the doc into R2 before step 1; <code class="tok">markup pull &lt;url&gt;</code> replays step 3 from a terminal.</li>
+          <li><span class="hl-plain">Unit D · Ship:</span> publish the CE Jira board audit, drop one URL in Slack, run the whole sequence for real.</li>
+        </ul>
+        <p style="margin-top:10px;">Units are independent; they fan out to parallel agents and converge on the publish. <span class="hl">Done means the audit is reviewed at one URL by both of you, today.</span></p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow eyebrow--rule">05 · The ladder</div>
+    <h2>Where this goes after today</h2>
+    <div class="cols-3">
+      <div class="gz-card">
+        <span class="phase-num">Phase 1 · Today</span>
+        <h3>One shared canvas</h3>
+        <p>Publish, annotate, poll, attribution. Export unchanged, so the existing agent loop keeps working while humans get a shared page.</p>
+      </div>
+      <div class="gz-card">
+        <span class="phase-num">Phase 2 · This week</span>
+        <h3>The conversation</h3>
+        <p>Replies and resolve states on every annotation (the PR-review grammar), Slack ping when notes land, and <code class="tok">markup pull</code> so his agent reads feedback straight from the API. The agent becomes a third participant that can answer into a thread: fixed in rev 3.</p>
+      </div>
+      <div class="gz-card">
+        <span class="phase-num">Phase 3 · Later</span>
+        <h3>The room</h3>
+        <p>A Durable Object per document: live presence and cursors, deep links to a specific pin, a multiplayer dashboard across all open reviews, and version triage in the UI when a doc is republished.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="honesty">
+      <div class="eyebrow">What this doesn't settle</div>
+      <ul style="padding-left:1.1rem; font-size:15.5px;">
+        <li>ldpub is a provisioned prototype; confirming the Worker is live (and re-running the idempotent provision script if not) is step zero of the build.</li>
+        <li>Two writers saving the same JSON in the same second can drop a write under R2 read-modify-write. Acceptable at two players; the Durable Object in phase 3 removes it.</li>
+        <li>Annotations must survive a republish. The local source-hash triage flow covers this, but it needs to be carried through the sync layer, not assumed.</li>
+        <li>Republish currently has a seconds-long 404 window (delete-then-put).</li>
+        <li>The engineer needs a service token to publish himself; until one is minted, the interim path is he slacks the file and you publish it.</li>
+        <li>Zero Trust free tier caps at 50 seats. Fine for the team, a decision point before org-wide rollout.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="colophon">
+    Sources: ~/code/markup (README, src/serve.js, src/wrap.js, src/client/persist.js) · ~/code/ldpub (README, wrangler.jsonc, src/auth.ts, src/store.ts, src/worker.ts)<br>
+    Generated by Claude Code (Fable) · 2026-08-27 · Gazette
+  </footer>
+
+</div>
+</body>
+</html>
