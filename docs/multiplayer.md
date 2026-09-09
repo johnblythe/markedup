@@ -63,10 +63,15 @@ allowlist, LD-140 namespace ownership, LD-141 Access session duration,
 LD-143 port off personal Cloudflare (the wire contract is the migration
 seam). Known but unticketed as of this writing:
 
-1. **Vanishing text annotation** (bug, unreproduced): `hydrate()` try/catches
-   per annotation and logs `[markup] render skipped <id>` so one bad note
-   can't blank the drawer; root cause never confirmed. Hypothesis: selection
-   crossing a bold boundary, possibly fixed by the cross-element rewrite.
+1. **Vanishing text annotation** (bug, root cause unconfirmed): `hydrate()`
+   try/catches per annotation and logs `[markup] render skipped <id>` so one
+   bad note can't blank the drawer. Hypothesis: selection crossing a bold
+   boundary, possibly fixed by the cross-element rewrite. A concrete repro
+   exists locally at `tmp/vanish-repro.annotations.json` plus
+   `tmp/vanish-verify/` (annotation set + the exact source doc); it stays
+   out of the repo because the source doc is internal work content, so
+   whoever picks this up should first distill it into a small sanitized
+   fixture before `tmp/` gets cleaned.
 2. **Clear-all undo**: needs a soft-delete path plus a tombstone-resurrection
    guard to be safe against the poll loop; deliberately deferred.
 3. **Contract parity harness**: one suite run against annostore, the stub,
