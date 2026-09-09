@@ -30,10 +30,11 @@ them, and what was deliberately left on the table.
 `src/client/persist.js` is the seam: localStorage by default, remote driver
 when the wrapper injects `__MARKUP_REMOTE__`. `src/annostore.js` is the local
 reference implementation of the wire contract (`docs/multiplayer-contract.md`);
-`test/stub-api.js` mirrors it for slackops tests; the ldpub Worker is the
-production implementation. Identity: Cloudflare Access JWT in production
-(server stamps authors; clients never set them), `?persona=`/`X-Markup-User`
-in the local sandbox.
+`test/stub-api.js` mirrors the annotations and `/api/me` routes for slackops
+tests (no presence or shots); the ldpub Worker is the production
+implementation. Identity: Cloudflare Access JWT in production (server stamps
+authors; clients never set them). Local-sandbox precedence: `X-Markup-User`
+header, then `?persona=`, then the older `?as=` alias, then `local@dev`.
 
 ## Running it
 
@@ -67,8 +68,8 @@ LD-143 port off personal Cloudflare (the wire contract is the migration
 seam). Known but unticketed as of this writing:
 
 1. **Vanishing text annotation** (bug, root cause unconfirmed): `hydrate()`
-   try/catches per annotation and logs `[markup] render skipped <id>` so one
-   bad note can't blank the drawer. Hypothesis: selection crossing a bold
+   try/catches per annotation and logs `[markup] render skipped for <id>`
+   (grep for "render skipped") so one bad note can't blank the drawer. Hypothesis: selection crossing a bold
    boundary, possibly fixed by the cross-element rewrite. A concrete repro
    exists locally at `tmp/vanish-repro.annotations.json` plus
    `tmp/vanish-verify/` (annotation set + the exact source doc); it stays
@@ -78,7 +79,11 @@ seam). Known but unticketed as of this writing:
 2. **Clear-all undo**: needs a soft-delete path plus a tombstone-resurrection
    guard to be safe against the poll loop; deliberately deferred.
 3. **Contract parity harness**: one suite run against annostore, the stub,
-   and the Worker, so guards never have to be hand-ported again.
+   and the Worker, so guards never have to be hand-ported again. Cheap first
+   step, all in-repo: a shared request/response vector fixture run against
+   both annostore and the stub (which already diverge: the stub lacks
+   presence, shots, pngDataURL stripping, and the `state` mirror); Worker
+   parity is the second, cross-repo step.
 4. **`markup unpublish`**: ldpub's script still speaks the pre-v2 API; stale
    canvases can't be cleanly removed.
 5. **Slack write-path via incoming webhook**: the no-app-approval unlock for

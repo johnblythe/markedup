@@ -1,12 +1,14 @@
 # Marked Up multiplayer: wire contract
 
 > **Status (2026-09-09):** ratified and shipped. The v1 freeze below is kept
-> verbatim as the normative baseline (including its same-day desk RULING,
-> which was part of the frozen file); everything since is in the amendments
-> list. **Do not implement from the frozen blocks alone**: the route listing
-> and the `mode` enum both have amended forms above them. Reference
-> implementations: `src/annostore.js` (local, authoritative for semantics),
-> `test/stub-api.js` (test mirror), and the ldpub Worker (production,
+> verbatim as the normative baseline (including its same-day desk RULING and
+> inline service-token amendment, both part of the frozen file); everything
+> since is in the amendments list. **Do not implement from the frozen blocks
+> alone**: the route listing and the `mode` enum both have amended forms
+> above them. Reference implementations: `src/annostore.js` (local,
+> authoritative for semantics), `test/stub-api.js` (test mirror of the
+> annotations and `/api/me` routes only: no presence, no shots, no
+> `pngDataURL` stripping), and the ldpub Worker (production,
 > `launchdarkly-labs/ldpub` `src/annotations.ts`). For live Slack-bridge
 > behavior, `docs/slack-ops.md` is the runbook; the fork-8 section below is
 > the frozen plan.
@@ -30,7 +32,19 @@
 - Shots: `GET/PUT /api/{user}/{project}/shots/{annoId}.png`; the server
   strips inline `pngDataURL` from annotation payloads on every PUT.
 - Local-sandbox identity: `?persona=` is the primary query param and wins
-  when both are present; the freeze's `?as=` survives as an older alias.
+  when both are present; the freeze's `?as=` survives as an older alias. An
+  explicit `X-Markup-User` header outranks both, then the `local@dev`
+  default (see `identityFor` in `src/serve.js`).
+- Server responses carry a computed, read-only `state` field mirroring
+  `status` (`accepted` reads as `resolved`) for consumers that speak the
+  older draft vocabulary; clients never send it. annostore emits it; the
+  test stub does not (a known parity gap, see the backlog in
+  `docs/multiplayer.md`).
+- The status transition graph in the freeze is advisory: the servers accept
+  any `status` value from a permitted caller rather than enforcing the
+  graph, and `mode` is neither validated nor normalized on the wire.
+- The cross-author note/anchor/payload match check is JSON-stringify
+  equality (key-order sensitive), not structural equality.
 
 ---
 

@@ -9,6 +9,12 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Added
 
+- Contract-doc accuracy fixes from the late review wave on #8: the stub is
+  documented as mirroring only the annotations and `/api/me` routes; the
+  computed read-only `state` mirror, the advisory (unenforced) status graph,
+  the key-order-sensitive match check, and the full local identity
+  precedence (header, then `?persona=`, then `?as=`) are all recorded as
+  amendments; the hydrate log line is quoted as it actually prints (#9).
 - The multiplayer paper trail is versioned: the frozen wire contract and its
   post-freeze amendments live at `docs/multiplayer-contract.md` (previously
   only in gitignored `tmp/`), `docs/multiplayer.md` records the state of the
