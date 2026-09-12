@@ -197,6 +197,12 @@ loosely, and the project follows [Semantic Versioning](https://semver.org/spec/v
 
 ### Fixed
 
+- The review drawer no longer force-reopens after every comment. Once a pin,
+  highlight, or rect lost its anchor and got carried to Pending, that stale
+  entry made every subsequent refresh (any comment save) reopen the drawer
+  even if you'd just closed it; the drawer now only auto-opens the moment
+  something newly goes pending, not for as long as an old pending item sits
+  unresolved (#10).
 - Cmd/Ctrl+Enter and Esc work again inside markup's own text boxes (popover
   note, reply composer, palette input). The keyboard-isolation shield stops
   propagation at window, which silently killed every key listener attached to

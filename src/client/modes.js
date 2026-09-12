@@ -151,7 +151,12 @@ var Modes = (function () {
       },
     );
 
-    var shouldOpen = pending.length > 0 || sourceChanged;
+    // Only force the drawer open when something newly went pending this
+    // pass. Using pending.length here instead of `changed` would reopen the
+    // drawer on every future refresh (every comment save) for as long as any
+    // already-known pending item sits unresolved -- annoying and not the
+    // point, which is a one-time nudge to triage.
+    var shouldOpen = changed || sourceChanged;
     if (shouldOpen && !Sidebar.isOpen()) Sidebar.open();
 
     if (typeof window.__MARKUP_UPDATE_SIDEBAR_COUNT__ === "function") {
